@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <title>Arcade Fight</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      background: #0f0f1a;
+      overflow: hidden;
+      width: 100%;
+      height: 100%;
+      font-family: 'Segoe UI', monospace, sans-serif;
+      color: #fff;
+    }
+
+    /* Canvas posicionado via JS (centralizado + escalonado) */
+    #gameCanvas { display: block; position: absolute; }
+
+    /* Overlay mantém 1280x720 internamente e escala via transform */
+    #overlay {
+      position: absolute;
+      pointer-events: none;
+      width: 1280px;
+      height: 720px;
+    }
+
+    /* ── Painel de QR Code ── */
+    #painelQR {
+      display: none;
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(15,15,26,0.97);
+      border: 2px solid #e94560;
+      border-radius: 20px;
+      padding: 32px 50px 28px;
+      text-align: center;
+      pointer-events: all;
+      min-width: 440px;
+    }
+
+    #painelQR h2 { font-size: 24px; color: #e94560; margin-bottom: 6px; letter-spacing: 2px; }
+    #painelQR p  { font-size: 13px; color: #aaa; margin-bottom: 18px; }
+
+    #qrImg {
+      width: 200px; height: 200px;
+      border: 4px solid #fff;
+      border-radius: 8px;
+      display: block;
+      margin: 0 auto 14px;
+      background: #fff;
+    }
+
+    #salaIdDisplay { font-size: 26px; font-weight: 900; color: #ffd700; letter-spacing: 4px; margin-bottom: 6px; }
+    #urlDisplay { font-size: 11px; color: #666; word-break: break-all; margin-bottom: 16px; }
+
+    .status-jogadores {
+      display: flex; gap: 12px;
+      justify-content: center;
+      margin-bottom: 16px;
+    }
+
+    .slot-jogador {
+      padding: 9px 18px; border-radius: 10px;
+      border: 2px solid #333;
+      font-size: 13px; font-weight: 700;
+      min-width: 120px; text-align: center;
+      transition: all .3s;
+    }
+    .slot-jogador.aguardando { color: #555; border-color: #333; }
+    .slot-jogador.p1.conectado { border-color: #e94560; color: #e94560; }
+    .slot-jogador.p2.conectado { border-color: #1565c0; color: #4fc3f7; }
+
+    /* ── Painel de seleção de dificuldade ── */
+    #painelDificuldade {
+      display: none;
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(15,15,26,0.97);
+      border: 2px solid #e94560;
+      border-radius: 20px;
+      padding: 36px 60px 28px;
+      text-align: center;
+      pointer-events: all;
+    }
+
+    #painelDificuldade h2 { color: #e94560; font-size: 22px; margin-bottom: 22px; letter-spacing: 1px; }
+
+    .btns-dif { display: flex; gap: 14px; justify-content: center; }
+
+    .btn-dif {
+      padding: 12px 26px; border-radius: 10px;
+      border: 2px solid; font-size: 15px; font-weight: 700;
+      cursor: pointer; background: transparent;
+      transition: all .15s; pointer-events: all;
+    }
+    .btn-dif.facil   { color: #4caf50; border-color: #4caf50; }
+    .btn-dif.medio   { color: #ff9800; border-color: #ff9800; }
+    .btn-dif.dificil { color: #e94560; border-color: #e94560; }
+    .btn-dif:hover, .btn-dif.focused { color: #fff; }
+    .btn-dif.facil:hover,   .btn-dif.facil.focused   { background: #4caf50; }
+    .btn-dif.medio:hover,   .btn-dif.medio.focused   { background: #ff9800; }
+    .btn-dif.dificil:hover, .btn-dif.dificil.focused { background: #e94560; }
+
+    /* ── Botões de modo na tela inicial ── */
+    #botoesInicio {
+      position: absolute; bottom: 90px;
+      width: 100%; justify-content: center; gap: 40px;
+      pointer-events: none;
+    }
+    #botoesInicio.visible { display: flex; pointer-events: all; }
+    #botoesInicio.hidden  { display: none;  pointer-events: none; }
+
+    #botoesInicio button {
+      padding: 18px 48px; border-radius: 12px;
+      font-size: 19px; font-weight: 900; letter-spacing: 2px;
+      cursor: pointer; border: 2px solid; background: transparent;
+      transition: all .15s; pointer-events: all;
+    }
+    #btnSingle { color: #e94560; border-color: #e94560; }
+    #btnMulti  { color: #4fc3f7; border-color: #4fc3f7; }
+    #btnSingle:hover, #btnSingle.focused { background: #e94560; color: #fff; }
+    #btnMulti:hover,  #btnMulti.focused  { background: #4fc3f7; color: #000; }
+
+    /* ── Legenda de comandos (só durante a luta) ── */
+    .legenda-controles {
+      position: absolute; top: 80px;
+      width: 200px; padding: 12px 14px;
+      background: rgba(15,15,26,0.85);
+      border-radius: 10px;
+      font-size: 11px; line-height: 1.7;
+      pointer-events: none; display: none;
+      font-family: monospace;
+    }
+    .legenda-controles.visible { display: block; }
+    .legenda-p1 { left: 12px; border: 2px solid #e94560; color: #ffcdd2; }
+    .legenda-p2 { right: 12px; border: 2px solid #1565c0; color: #bbdefb; }
+    .legenda-controles h4 { font-size: 13px; margin-bottom: 6px; letter-spacing: 1px; }
+    .legenda-p1 h4 { color: #e94560; }
+    .legenda-p2 h4 { color: #4fc3f7; }
+    .legenda-controles span { color: #ffd700; font-weight: 700; }
+
+    /* ── Botão Voltar (na tela QR) ── */
+    #btnVoltar {
+      position: absolute; top: 20px; left: 20px;
+      padding: 10px 20px; border-radius: 10px;
+      border: 2px solid #aaa;
+      background: rgba(15,15,26,0.9);
+      color: #aaa; font-size: 14px; font-weight: 700;
+      cursor: pointer; pointer-events: all;
+      display: none; z-index: 10; transition: all .2s;
+    }
+    #btnVoltar.visible { display: block; }
+    #btnVoltar:hover, #btnVoltar.focused { border-color: #e94560; color: #e94560; }
+
+    /* ── QR Code do placar ── */
+    #qrPlacarOverlay {
+      display: none; position: absolute; top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.92);
+      z-index: 15; flex-direction: column;
+      align-items: center; justify-content: center;
+      pointer-events: none;
+    }
+    #qrPlacarOverlay.visible { display: flex; pointer-events: all; }
+    #qrPlacarOverlay h2 { color: #ffd700; font-size: 36px; margin-bottom: 8px; letter-spacing: 2px; }
+    #qrPlacarOverlay p  { color: #aaa; font-size: 16px; margin-bottom: 20px; }
+    #qrPlacarImg { width: 260px; height: 260px; background: #fff; padding: 12px; border-radius: 10px; }
+    #btnPularPlacar {
+      margin-top: 24px; padding: 13px 40px;
+      background: transparent; border: 2px solid #e94560;
+      border-radius: 10px; color: #e94560;
+      font-size: 16px; font-weight: 700; letter-spacing: 1px;
+      cursor: pointer; transition: all .2s; pointer-events: all;
+    }
+    #btnPularPlacar:hover, #btnPularPlacar.focused { background: #e94560; color: #fff; }
+
+    /* ── Mensagem de erro/info ── */
+    #msgErro {
+      display: none; position: absolute; bottom: 30px;
+      width: 100%; text-align: center;
+      color: #e94560; font-size: 15px;
+      pointer-events: none;
+    }
+
+    /* ── Notificação Offline ── */
+    #notifOffline {
+      display: none; position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(15,15,26,0.97);
+      border: 2px solid #ff9800;
+      border-radius: 16px;
+      padding: 32px 48px 26px;
+      text-align: center;
+      z-index: 200;
+      pointer-events: all;
+      min-width: 420px;
+    }
+    #notifOffline.visible { display: block; }
+    #notifOffline h3 { color: #ff9800; font-size: 22px; margin-bottom: 8px; }
+    #notifOffline p  { color: #aaa; font-size: 14px; margin-bottom: 24px; line-height: 1.6; }
+    .notif-btns { display: flex; gap: 16px; justify-content: center; }
+    .notif-btns button {
+      padding: 12px 30px; border-radius: 10px;
+      font-size: 15px; font-weight: 700;
+      cursor: pointer; border: 2px solid;
+      background: transparent; transition: all .15s;
+      pointer-events: all;
+    }
+    #notifBtnReiniciar { color: #e94560; border-color: #e94560; }
+    #notifBtnReiniciar:hover, #notifBtnReiniciar.focused { background: #e94560; color: #fff; }
+    #notifBtnContinuar { color: #4caf50; border-color: #4caf50; }
+    #notifBtnContinuar:hover, #notifBtnContinuar.focused { background: #4caf50; color: #fff; }
+  </style>
+</head>
+<body>
+
+  <canvas id="gameCanvas"></canvas>
+
+  <div id="overlay">
+
+    <!-- Botão voltar (só tela QR) -->
+    <button id="btnVoltar" onclick="voltarAoMenu()">◄ VOLTAR</button>
+
+    <!-- Legendas (só durante a luta) -->
+    <div class="legenda-controles legenda-p1" id="legendaP1">
+      <h4>◄ PLAYER 1</h4>
+      <span>A/D</span> mover<br>
+      <span>W / ESPAÇO</span> pular<br>
+      <span>J</span> ataque rápido<br>
+      <span>K</span> ataque forte<br>
+      <span>L</span> defender<br>
+      <span>I</span> especial<br>
+      <span>U</span> counter
+    </div>
+
+    <div class="legenda-controles legenda-p2" id="legendaP2">
+      <h4>PLAYER 2 ►</h4>
+      <span>◄ ►</span> mover<br>
+      <span>▲</span> pular<br>
+      <span>Num 1</span> ataque rápido<br>
+      <span>Num 2</span> ataque forte<br>
+      <span>Num 3</span> defender<br>
+      <span>Num 5</span> especial<br>
+      <span>Num 4</span> counter
+    </div>
+
+    <!-- Overlay QR placar (pós GAME OVER) -->
+    <div id="qrPlacarOverlay">
+      <h2>VEJA SEU RANKING!</h2>
+      <p>Escaneie para ver o placar completo</p>
+      <img id="qrPlacarImg" src="" alt="QR Placar">
+      <button id="btnPularPlacar" onclick="voltarMenuPosPlacar()">◄ VOLTAR AO MENU</button>
+    </div>
+
+    <!-- Botões da tela inicial -->
+    <div id="botoesInicio">
+      <button id="btnSingle" onclick="clicarSingle()">⚔ SINGLE PLAYER</button>
+      <button id="btnMulti"  onclick="clicarMulti()">⚔ MULTI PLAYER</button>
+    </div>
+
+    <!-- Painel de dificuldade -->
+    <div id="painelDificuldade">
+      <h2>DIFICULDADE DA IA</h2>
+      <div class="btns-dif">
+        <button class="btn-dif facil"   onclick="escolherDif('facil')">FÁCIL</button>
+        <button class="btn-dif medio"   onclick="escolherDif('medio')">MÉDIO</button>
+        <button class="btn-dif dificil" onclick="escolherDif('dificil')">DIFÍCIL</button>
+      </div>
+    </div>
+
+    <!-- Painel QR Code -->
+    <div id="painelQR">
+      <h2 id="qrTitulo">ESCANEIE O QR CODE</h2>
+      <p id="qrSub">Acesse com seu celular para entrar no jogo</p>
+
+      <img id="qrImg" src="" alt="QR Code">
+      <div id="salaIdDisplay">------</div>
+      <div id="urlDisplay"></div>
+
+      <div class="status-jogadores">
+        <div class="slot-jogador p1 aguardando" id="slotP1">P1 — Aguardando</div>
+        <div class="slot-jogador p2 aguardando" id="slotP2" style="display:none">P2 — Aguardando</div>
+      </div>
+    </div>
+
+    <!-- Notificação offline (aguarda escolha do jogador, sem timer) -->
+    <div id="notifOffline">
+      <h3>⚠ Sem internet</h3>
+      <p>Não foi possível conectar ao servidor.<br>
+         Partidas não serão salvas no placar.</p>
+      <div class="notif-btns">
+        <button id="notifBtnReiniciar" onclick="reiniciarApp()">Reiniciar</button>
+        <button id="notifBtnContinuar" onclick="continuarOffline()">Continuar offline</button>
+      </div>
+    </div>
+
+    <div id="msgErro"></div>
+
+  </div>
+
+  <!-- Scripts do jogo -->
+  <script src="./sprites.js"></script>
+  <script src="./controls.js"></script>
+  <script src="./api.js"></script>
+  <script src="./game.js"></script>
+
+  <script>
+    // ── Estado local ──────────────────────────────────────
+    let _modo        = null;
+    let _salaId      = null;
+    let _tokenP1     = null;
+    let _tokenP2     = null;
+    let _nickP1      = null;
+    let _nickP2      = null;
+    let _polling     = null;
+    let _dif         = 'medio';
+    let _modoOffline = false;
+    let _telaAtual   = 'inicial';
+    let _focusIdx    = 0;
+    let _menuGamepadRAF  = null;
+    let _menuGamepadPrev = {};
+
+    // ── Escala canvas + overlay para preencher a tela ─────
+    function ajustarTela() {
+      const sw = window.innerWidth;
+      const sh = window.innerHeight;
+      const scale = Math.min(sw / 1280, sh / 720);
+      const cw   = Math.round(1280 * scale);
+      const ch   = Math.round(720  * scale);
+      const left = Math.round((sw - cw) / 2);
+      const top  = Math.round((sh - ch) / 2);
+
+      const canvas = document.getElementById('gameCanvas');
+      canvas.style.left   = left + 'px';
+      canvas.style.top    = top  + 'px';
+      canvas.style.width  = cw   + 'px';
+      canvas.style.height = ch   + 'px';
+
+      // Overlay mantém coordenadas 1280x720 e escala via transform
+      const overlay = document.getElementById('overlay');
+      overlay.style.left            = left + 'px';
+      overlay.style.top             = top  + 'px';
+      overlay.style.transform       = `scale(${scale})`;
+      overlay.style.transformOrigin = 'top left';
+    }
+
+    // ── Inicialização ─────────────────────────────────────
+    window.addEventListener('DOMContentLoaded', async () => {
+      ajustarTela();
+      window.addEventListener('resize', ajustarTela);
+
+      // Registra teclado imediatamente — necessario para navegar na notif offline
+      // que aparece antes de Game.init() terminar
+      window.addEventListener('keydown', tratarTeclaMenu);
+
+      // Checa conectividade; enquanto resolve, o jogo ainda não carregou
+      const online = await Api.verificarConexao();
+      if (!online) mostrarNotifOffline();
+
+      await Game.init();
+      mostrarBotoesInicio();
+
+      // Garante que menu fique oculto quando SELECT inicia
+      document.addEventListener('game:selectIniciado', () => {
+        const el = document.getElementById('botoesInicio');
+        el.classList.add('hidden');
+        el.classList.remove('visible');
+        esconder('painelDificuldade');
+        esconder('painelQR');
+      });
+
+      document.addEventListener('game:telaInicial', () => {
+        esconderLegendas();
+        esconderQrPlacar();
+        mostrarBotoesInicio();
+      });
+
+      document.addEventListener('game:lutaIniciou', mostrarLegendas);
+
+      document.addEventListener('game:gameOver', () => {
+        esconderLegendas();
+        setTimeout(mostrarQrPlacar, 2500);
+      });
+    });
+
+    // ── Tela Inicial ──────────────────────────────────────
+    function mostrarBotoesInicio() {
+      _stopPolling();
+      _salaId = null; _tokenP1 = null; _tokenP2 = null;
+      _nickP1 = null; _nickP2 = null;
+
+      const el = document.getElementById('botoesInicio');
+      el.classList.remove('hidden');
+      el.classList.add('visible');
+      esconder('painelQR');
+      esconder('painelDificuldade');
+      esconderMsg();
+      document.getElementById('btnVoltar').classList.remove('visible');
+
+      _telaAtual = 'inicial';
+      _focusIdx  = 0;
+      // Nao sobrescreve foco se a notificacao offline ainda estiver visivel
+      if (!document.getElementById('notifOffline').classList.contains('visible')) {
+        atualizarFoco();
+      }
+    }
+
+    function clicarSingle() {
+      const el = document.getElementById('botoesInicio');
+      el.classList.add('hidden');
+      el.classList.remove('visible');
+      mostrar('painelDificuldade');
+      _telaAtual = 'dificuldade';
+      _focusIdx  = 0;
+      atualizarFoco();
+    }
+
+    function clicarMulti() {
+      const el = document.getElementById('botoesInicio');
+      el.classList.add('hidden');
+      el.classList.remove('visible');
+      _modo = 'multi';
+      if (_modoOffline) {
+        Game.iniciarFluxo('multi', null, null);
+        Game.jogadoresEntraramprontos(['Guest1', 'Guest2']);
+        return;
+      }
+      criarSala('multi');
+    }
+
+    function escolherDif(dif) {
+      _dif = dif;
+      Game.setDificuldade(dif);
+      esconder('painelDificuldade');
+      _modo = 'single';
+      if (_modoOffline) {
+        Game.iniciarFluxo('single', null, null);
+        Game.jogadoresEntraramprontos(['Guest1', 'CPU']);
+        return;
+      }
+      criarSala('single');
+    }
+
+    function voltarAoMenu() {
+      if (_salaId) {
+        try { Api.cancelarSala && Api.cancelarSala(_salaId); } catch(e) {}
+      }
+      mostrarBotoesInicio();
+    }
+
+    // ── Sala + QR Code ────────────────────────────────────
+    async function criarSala(modo) {
+      // Modo offline: pula API, começa com contas guest
+      if (_modoOffline) {
+        _modo = modo;
+        const nick2 = modo === 'multi' ? 'Guest2' : 'CPU';
+        Game.iniciarFluxo(modo, null, null);
+        Game.jogadoresEntraramprontos(['Guest1', nick2]);
+        return;
+      }
+
+      mostrarMsg('Conectando ao servidor...', 'info');
+
+      try {
+        const res = await Api.criarSala(modo);
+        if (!res.ok) {
+          mostrarMsg('Erro: ' + (res.erro || 'desconhecido'), 'erro');
+          setTimeout(mostrarBotoesInicio, 1500);
+          return;
+        }
+
+        _salaId = res.sala_id;
+
+        document.getElementById('qrImg').src = `data:image/png;base64,${res.qr_base64}`;
+        document.getElementById('salaIdDisplay').textContent = res.sala_id;
+        document.getElementById('urlDisplay').textContent = res.url_mobile;
+
+        _atualizar_slot('slotP1', 'P1 — Aguardando', false);
+        _atualizar_slot('slotP2', 'P2 — Aguardando', false);
+
+        if (modo === 'multi') {
+          document.getElementById('slotP2').style.display = '';
+          document.getElementById('qrTitulo').textContent = 'MODO 2 JOGADORES';
+          document.getElementById('qrSub').textContent = 'Os 2 jogadores devem escanear o mesmo QR Code';
+        } else {
+          document.getElementById('slotP2').style.display = 'none';
+          document.getElementById('qrTitulo').textContent = 'SINGLE PLAYER';
+          document.getElementById('qrSub').textContent = 'Escaneie para se identificar';
+        }
+
+        mostrar('painelQR');
+        esconderMsg();
+        document.getElementById('btnVoltar').classList.add('visible');
+        _telaAtual = 'qr';
+        _focusIdx  = 0;
+        atualizarFoco();
+
+        _polling = setInterval(_verificarSala, 1500);
+
+      } catch (e) {
+        console.error('[criarSala]', e);
+        mostrarMsg('Backend offline! ' + e.message, 'erro');
+        setTimeout(mostrarBotoesInicio, 2000);
+      }
+    }
+
+    async function _verificarSala() {
+      if (!_salaId) return;
+      try {
+        const sala = await Api.statusSala(_salaId);
+        if (!sala.ok) return;
+
+        if (sala.jogador1) {
+          _tokenP1 = sala.jogador1.token;
+          _nickP1  = sala.jogador1.nick;
+          _atualizar_slot('slotP1', '✓ ' + sala.jogador1.nick, true);
+        }
+        if (sala.jogador2) {
+          _tokenP2 = sala.jogador2.token;
+          _nickP2  = sala.jogador2.nick;
+          _atualizar_slot('slotP2', '✓ ' + sala.jogador2.nick, true);
+        }
+
+        if (sala.status === 'pronto' || sala.status === 'em_jogo') {
+          _stopPolling();
+          esconder('painelQR');
+          document.getElementById('btnVoltar').classList.remove('visible');
+
+          const nick1 = _nickP1 || 'P1';
+          const nick2 = _nickP2 || (sala.modo === 'single' ? 'CPU' : 'P2');
+
+          Game.iniciarFluxo(sala.modo, _salaId, _tokenP1);
+          Game.jogadoresEntraramprontos([nick1, nick2]);
+        }
+      } catch (e) {
+        console.warn('[verificarSala]', e);
+      }
+    }
+
+    function _stopPolling() {
+      if (_polling) { clearInterval(_polling); _polling = null; }
+    }
+
+    // ── Gamepad polling para overlays de menu ─────────────
+    function _iniciarPollGamepadMenu() {
+      if (_menuGamepadRAF) return;
+      _menuGamepadPrev = {};
+      function poll() {
+        _menuGamepadRAF = requestAnimationFrame(poll);
+        if (!navigator.getGamepads) return;
+        const pads = navigator.getGamepads();
+        for (let gi = 0; gi < pads.length; gi++) {
+          const pad = pads[gi];
+          if (!pad || !pad.connected) continue;
+          // Na primeira leitura inicializa prev com o estado atual
+          // para evitar trigger imediato de botoes ja pressionados
+          if (!_menuGamepadPrev[gi]) {
+            _menuGamepadPrev[gi] = {
+              h:    pad.axes[0] || 0,
+              btns: Array.from({length: pad.buttons.length}, (_, b) =>
+                      !!(pad.buttons[b] && pad.buttons[b].pressed))
+            };
+            continue;
+          }
+          const prev = _menuGamepadPrev[gi];
+          const dz = 0.4;
+          const h  = pad.axes[0] || 0;
+          const curLeft  = h < -dz || !!(pad.buttons[14] && pad.buttons[14].pressed);
+          const curRight = h >  dz || !!(pad.buttons[15] && pad.buttons[15].pressed);
+          const prevLeft  = prev.h < -dz || prev.btns[14];
+          const prevRight = prev.h >  dz || prev.btns[15];
+          if (curLeft  && !prevLeft)  _menuGamepadNavegar(-1);
+          if (curRight && !prevRight) _menuGamepadNavegar(1);
+          prev.h = h;
+          for (let b = 0; b < pad.buttons.length; b++) {
+            const pressed = !!(pad.buttons[b] && pad.buttons[b].pressed);
+            // Botoes 12-15 sao o dpad — usados para navegacao, nao confirmacao
+            if (pressed && !prev.btns[b] && b < 12) _menuGamepadConfirmar();
+            prev.btns[b] = pressed;
+          }
+        }
+      }
+      _menuGamepadRAF = requestAnimationFrame(poll);
+    }
+
+    function _pararPollGamepadMenu() {
+      if (_menuGamepadRAF) { cancelAnimationFrame(_menuGamepadRAF); _menuGamepadRAF = null; }
+      _menuGamepadPrev = {};
+    }
+
+    function _menuGamepadNavegar(dir) {
+      const els = obterElementosFocaveis();
+      if (!els.length) return;
+      _focusIdx = (_focusIdx + dir + els.length) % els.length;
+      atualizarFoco();
+    }
+
+    function _menuGamepadConfirmar() {
+      const els = obterElementosFocaveis();
+      if (els[_focusIdx]) els[_focusIdx].click();
+    }
+
+    function _atualizar_slot(id, texto, conectado) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.textContent = texto;
+      const classe = id === 'slotP1' ? 'p1' : 'p2';
+      el.className = `slot-jogador ${classe} ${conectado ? 'conectado' : 'aguardando'}`;
+    }
+
+    // ── Legendas de controle ──────────────────────────────
+    function mostrarLegendas() {
+      document.getElementById('legendaP1').classList.add('visible');
+      if (_modo === 'multi') {
+        document.getElementById('legendaP2').classList.add('visible');
+      }
+    }
+    function esconderLegendas() {
+      document.getElementById('legendaP1').classList.remove('visible');
+      document.getElementById('legendaP2').classList.remove('visible');
+    }
+
+    // ── QR Code do placar ─────────────────────────────────
+    async function mostrarQrPlacar() {
+      const overlay = document.getElementById('qrPlacarOverlay');
+      const img     = document.getElementById('qrPlacarImg');
+
+      try {
+        const res = await Api.placarQR();
+        if (res.ok && res.qr_base64) {
+          img.src = `data:image/png;base64,${res.qr_base64}`;
+        }
+      } catch (e) {
+        console.warn('[placar QR]', e);
+      }
+
+      overlay.classList.add('visible');
+      _telaAtual = 'qrPlacar';
+      _focusIdx  = 0;
+      atualizarFoco();
+      _iniciarPollGamepadMenu();
+    }
+
+    function esconderQrPlacar() {
+      document.getElementById('qrPlacarOverlay').classList.remove('visible');
+      _pararPollGamepadMenu();
+    }
+
+    function voltarMenuPosPlacar() {
+      esconderQrPlacar();
+      document.dispatchEvent(new CustomEvent('game:telaInicial'));
+    }
+
+    // ── Modo Offline ──────────────────────────────────────
+    function mostrarNotifOffline() {
+      _modoOffline = true;
+      document.getElementById('notifOffline').classList.add('visible');
+      _focusIdx = 1; // padrão: "Continuar offline"
+      atualizarFoco();
+      _iniciarPollGamepadMenu();
+    }
+
+    function continuarOffline() {
+      document.getElementById('notifOffline').classList.remove('visible');
+      _pararPollGamepadMenu();
+      _focusIdx = 0;
+      atualizarFoco();
+    }
+
+    function reiniciarApp() {
+      _pararPollGamepadMenu();
+      const { ipcRenderer } = require('electron');
+      ipcRenderer.send('restart-app');
+    }
+
+    // ── Navegação por teclado no menu ─────────────────────
+    function tratarTeclaMenu(e) {
+      const estado = Game.getState ? Game.getState() : '';
+      if (estado === 'FIGHTING' || estado === 'SELECT' ||
+          estado === 'COUNTDOWN' || estado === 'ROUND_END') return;
+
+      const elementos = obterElementosFocaveis();
+      if (elementos.length === 0) return;
+
+      const ehEsq     = (e.code === 'ArrowLeft'  || e.code === 'KeyA');
+      const ehDir     = (e.code === 'ArrowRight' || e.code === 'KeyD');
+      const ehCima    = (e.code === 'ArrowUp'    || e.code === 'KeyW');
+      const ehBaixo   = (e.code === 'ArrowDown'  || e.code === 'KeyS');
+      const ehConfirma = (e.code === 'Space' || e.code === 'Enter' ||
+                          e.code === 'KeyK'  || e.code === 'Numpad2');
+
+      if (ehEsq || ehDir || ehCima || ehBaixo) {
+        if (ehEsq || ehCima)  _focusIdx = (_focusIdx - 1 + elementos.length) % elementos.length;
+        if (ehDir || ehBaixo) _focusIdx = (_focusIdx + 1) % elementos.length;
+        atualizarFoco();
+        e.preventDefault();
+        return;
+      }
+
+      if (ehConfirma) {
+        const alvo = elementos[_focusIdx];
+        if (alvo) alvo.click();
+        e.preventDefault();
+      }
+    }
+
+    function obterElementosFocaveis() {
+      // Overlays tem prioridade, independente de _telaAtual
+      if (document.getElementById('notifOffline').classList.contains('visible')) {
+        return [
+          document.getElementById('notifBtnReiniciar'),
+          document.getElementById('notifBtnContinuar')
+        ];
+      }
+      if (document.getElementById('qrPlacarOverlay').classList.contains('visible')) {
+        return [document.getElementById('btnPularPlacar')];
+      }
+      if (_telaAtual === 'inicial') {
+        return [
+          document.getElementById('btnSingle'),
+          document.getElementById('btnMulti')
+        ];
+      }
+      if (_telaAtual === 'dificuldade') {
+        return Array.from(document.querySelectorAll('#painelDificuldade .btn-dif'));
+      }
+      if (_telaAtual === 'qr') {
+        return [document.getElementById('btnVoltar')];
+      }
+      return [];
+    }
+
+    function atualizarFoco() {
+      document.querySelectorAll('.focused').forEach(el => el.classList.remove('focused'));
+      const elementos = obterElementosFocaveis();
+      if (elementos[_focusIdx]) {
+        elementos[_focusIdx].classList.add('focused');
+        elementos[_focusIdx].focus({ preventScroll: true });
+      }
+    }
+
+    // ── Utils ─────────────────────────────────────────────
+    function mostrar(id)  { const el = document.getElementById(id); if (el) el.style.display = 'block'; }
+    function esconder(id) { const el = document.getElementById(id); if (el) el.style.display = 'none'; }
+
+    function mostrarMsg(txt, tipo) {
+      const el = document.getElementById('msgErro');
+      el.textContent = txt;
+      el.style.color   = tipo === 'erro' ? '#e94560' : '#aaa';
+      el.style.display = '';
+      if (tipo === 'erro') setTimeout(() => { el.style.display = 'none'; }, 4000);
+    }
+    function esconderMsg() { document.getElementById('msgErro').style.display = 'none'; }
+  </script>
+
+</body>
+</html>
