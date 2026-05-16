@@ -310,12 +310,66 @@
   <script src="./game.js"></script>
 
   <script>
-    // ── Estado local ──────────────────────────────────────
-    let _modo        = null;
-    let _salaId      = null;
-    let _tokenP1     = null;
-    let _tokenP2     = null;
-    let _nickP1      = null;
+    // =============================================================================
+    // index.html — Orquestração de UI e fluxo de entrada do jogo
+    //
+    // Responsabilidades:
+    //   • Escalar canvas e overlay para qualquer resolução de tela
+    //   • Verificar conectividade com o backend (Api.verificarConexao) no boot
+    //   • Exibir tela inicial → painel de dificuldade → painel QR (online)
+    //     ou iniciar direto em modo guest (offline)
+    //   • Polling de sala via Api.statusSala a cada 1.5s até os jogadores entrarem
+    //   • Navegação de menu por teclado (WASD / setas) e gamepad (analógico + D-pad)
+    //   • Atalhos globais L2/R2 via loop independente para trocar de modo a qualquer momento
+    //   • Exibir/ocultar legendas de controle durante a luta
+    //   • Exibir QR do placar pós-game via Api.placarQR
+    //   • Reiniciar app Electron via ipcRenderer quando o usuário solicita
+    //
+    // CustomEvents recebidos de game.js:
+    //   game:selectIniciado → oculta menus, para poll de gamepad de menu
+    //   game:telaInicial    → restaura botões da tela inicial (chamado por Game.voltarInicio)
+    //   game:lutaIniciou    → exibe legendas de controle
+    //   game:gameOver       → oculta legendas, agenda exibição do QR do placar
+    //
+    // CustomEvents despachados para game.js:
+    //   game:telaInicial → acionado por voltarMenuPosPlacar() ao fechar o QR do placar
+    //
+    // Calls à API (api.js):
+    //   Api.verificarConexao()                         — boot
+    //   Api.criarSala(modo)                            — criarSala()
+    //   Api.statusSala(salaId)                         — _verificarSala() (polling 1.5s)
+    //   Api.cancelarSala(salaId)                       — voltarAoMenu(), _ativarModoViaBotao()
+    //   Api.placarQR()                                 — mostrarQrPlacar()
+    //
+    // Calls ao jogo (game.js via window.Game):
+    //   Game.init()                                    — boot
+    //   Game.iniciarFluxo(modo, salaId, tokenP1)       — ao sala ficar pronta / modo offline
+    //   Game.jogadoresEntraramprontos([nick1, nick2])  — idem
+    //   Game.setDificuldade(dif)                       — escolherDif()
+    //   Game.getState()                                — tratarTeclaMenu(), _ativarModoViaBotao()
+    //   Game.voltarInicio()                            — _ativarModoViaBotao()
+    //
+    // Calls ao Controls (controls.js via window.Controls):
+    //   Controls.resetInput()   — ao iniciar fluxo e ao voltar ao menu pelo gamepad
+    // =============================================================================
+
+    // ── Estado local da UI ────────────────────────────────
+    // _modo:           'single' | 'multi' — modo escolhido nesta sessão
+    // _salaId:         ID da sala criada no backend (null se offline ou sem sala)
+    // _tokenP1:        JWT do P1, devolvido pelo backend ao entrar na sala
+    // _nickP1/_nickP2: nicks dos jogadores obtidos via polling da sala
+    // _polling:        ID do setInterval do polling de sala (clearInterval para parar)
+    // _dif:            dificuldade selecionada: 'facil' | 'medio' | 'dificil'
+    // _modoOffline:    true quando Api.verificarConexao retornou false no boot
+    // _telaAtual:      tela ativa para obterElementosFocaveis: 'inicial'|'dificuldade'|'qr'|'qrPlacar'|'jogando'
+    // _focusIdx:       índice do elemento focado na lista retornada por obterElementosFocaveis
+    // _menuGamepadRAF: ID do requestAnimationFrame do poll de gamepad de menu (null = parado)
+    // _menuGamepadPrev: estado anterior dos pads no poll de menu, indexado por índice do pad
+    // _shortcutPrev:   estado anterior dos botões L2/R2 no loop de atalhos globais
+    let _modo    = null;
+    let _salaId  = null;
+    let _tokenP1 = null;
+    let _nickP1  = null;
     let _nickP2      = null;
     let _polling     = null;
     let _dif         = 'medio';
@@ -324,8 +378,12 @@
     let _focusIdx    = 0;
     let _menuGamepadRAF  = null;
     let _menuGamepadPrev = {};
+    let _shortcutPrev    = {};
 
     // ── Escala canvas + overlay para preencher a tela ─────
+    // Mantém proporção 16:9 (1280×720) via letter/pillarbox.
+    // Chamada no boot e a cada resize da janela Electron.
+    // O overlay usa CSS transform: scale() para que seus filhos operem em px 1280×720.
     function ajustarTela() {
       const sw = window.innerWidth;
       const sh = window.innerHeight;
@@ -350,6 +408,15 @@
     }
 
     // ── Inicialização ─────────────────────────────────────
+    // Sequência de boot ao carregar a página:
+    //   1. ajustarTela() + listener de resize
+    //   2. Registra listener de teclado para menu (antes de Game.init, pois a
+    //      notificação offline pode aparecer antes do jogo estar pronto)
+    //   3. Api.verificarConexao() → se offline, exibe notifOffline e seta _modoOffline
+    //   4. Game.init() — carrega sprites, configura canvas, registra inputs (controls.js)
+    //   5. mostrarBotoesInicio() — exibe btnSingle/btnMulti
+    //   6. _iniciarShortcutsGamepad() — loop L2/R2 sempre ativo
+    //   7. Registra listeners dos CustomEvents de game.js
     window.addEventListener('DOMContentLoaded', async () => {
       ajustarTela();
       window.addEventListener('resize', ajustarTela);
@@ -364,24 +431,36 @@
 
       await Game.init();
       mostrarBotoesInicio();
+      _iniciarShortcutsGamepad();
 
-      // Garante que menu fique oculto quando SELECT inicia
+      // game:selectIniciado → disparado por game.js ao entrar na tela SELECT.
+      // Oculta todos os overlays de menu e para o poll de gamepad de menu,
+      // pois o game loop de game.js passa a controlar os inputs a partir daqui.
       document.addEventListener('game:selectIniciado', () => {
         const el = document.getElementById('botoesInicio');
         el.classList.add('hidden');
         el.classList.remove('visible');
         esconder('painelDificuldade');
         esconder('painelQR');
+        _pararPollGamepadMenu();
+        _telaAtual = 'jogando';
       });
 
+      // game:telaInicial → disparado por game.js ao executar _voltarInicio(),
+      // e também por voltarMenuPosPlacar() neste arquivo.
+      // Restaura os botões da tela inicial.
       document.addEventListener('game:telaInicial', () => {
         esconderLegendas();
         esconderQrPlacar();
         mostrarBotoesInicio();
       });
 
+      // game:lutaIniciou → disparado por game.js ao iniciar o FIGHTING.
+      // Exibe as legendas de teclado dos dois jogadores sobre o canvas.
       document.addEventListener('game:lutaIniciou', mostrarLegendas);
 
+      // game:gameOver → disparado por game.js ao encerrar a partida (_encerrarPartida).
+      // Aguarda 2.5s (animação de GAME OVER no canvas) e então exibe o QR do placar.
       document.addEventListener('game:gameOver', () => {
         esconderLegendas();
         setTimeout(mostrarQrPlacar, 2500);
@@ -389,9 +468,14 @@
     });
 
     // ── Tela Inicial ──────────────────────────────────────
+
+    // Exibe os botões SINGLE PLAYER e MULTI PLAYER e zera o estado de sala.
+    // Chamada no boot, ao voltar do menu pelo gamepad, e pelo listener game:telaInicial.
+    // Não inicia o poll de gamepad de menu se a notificação offline estiver visível
+    // (a própria notifOffline já gerencia o poll).
     function mostrarBotoesInicio() {
       _stopPolling();
-      _salaId = null; _tokenP1 = null; _tokenP2 = null;
+      _salaId = null; _tokenP1 = null;
       _nickP1 = null; _nickP2 = null;
 
       const el = document.getElementById('botoesInicio');
@@ -407,9 +491,12 @@
       // Nao sobrescreve foco se a notificacao offline ainda estiver visivel
       if (!document.getElementById('notifOffline').classList.contains('visible')) {
         atualizarFoco();
+        _iniciarPollGamepadMenu();
       }
     }
 
+    // Oculta os botões de modo e exibe o painel de seleção de dificuldade.
+    // Chamada pelo onclick de #btnSingle e pelo atalho L2 no gamepad (quando na tela inicial).
     function clicarSingle() {
       const el = document.getElementById('botoesInicio');
       el.classList.add('hidden');
@@ -418,8 +505,13 @@
       _telaAtual = 'dificuldade';
       _focusIdx  = 0;
       atualizarFoco();
+      _iniciarPollGamepadMenu();
     }
 
+    // Inicia o modo multiplayer: cria sala online ou vai direto para o SELECT offline.
+    // Chamada pelo onclick de #btnMulti e pelo atalho R2 no gamepad (quando na tela inicial).
+    // Offline: Game.iniciarFluxo('multi', null, null) + Game.jogadoresEntraramprontos.
+    // Online:  chama criarSala('multi') → Api.criarSala → exibe QR.
     function clicarMulti() {
       const el = document.getElementById('botoesInicio');
       el.classList.add('hidden');
@@ -433,6 +525,11 @@
       criarSala('multi');
     }
 
+    // Registra a dificuldade escolhida e inicia o fluxo single player.
+    // Chamada pelo onclick de cada .btn-dif no painelDificuldade.
+    // Game.setDificuldade(dif) → ajusta parâmetros da IA em game.js.
+    // Offline: inicia direto com Guest1 vs CPU.
+    // Online:  chama criarSala('single') → aguarda P1 entrar via QR.
     function escolherDif(dif) {
       _dif = dif;
       Game.setDificuldade(dif);
@@ -446,6 +543,10 @@
       criarSala('single');
     }
 
+    // Cancela a sala atual (se existir) e volta para a tela inicial.
+    // Chamada pelo onclick de #btnVoltar, visível apenas na tela QR.
+    // Api.cancelarSala é chamado de forma fire-and-forget (sem await),
+    // pois o backend também expira salas inativas.
     function voltarAoMenu() {
       if (_salaId) {
         try { Api.cancelarSala && Api.cancelarSala(_salaId); } catch(e) {}
@@ -454,6 +555,15 @@
     }
 
     // ── Sala + QR Code ────────────────────────────────────
+
+    // Cria uma sala no backend e exibe o QR Code para os jogadores entrarem.
+    // modo: 'single' | 'multi'
+    // Offline: ignora API e inicia com contas Guest imediatamente.
+    // Online:
+    //   → Api.criarSala(modo) → recebe { sala_id, qr_base64, url_mobile }
+    //   → Popula #painelQR com a imagem base64 e informações da sala
+    //   → Inicia polling _verificarSala() a cada 1.5s via setInterval
+    //   → Para a sala single: oculta slot P2 (apenas P1 precisa escanear)
     async function criarSala(modo) {
       // Modo offline: pula API, começa com contas guest
       if (_modoOffline) {
@@ -499,6 +609,7 @@
         _telaAtual = 'qr';
         _focusIdx  = 0;
         atualizarFoco();
+        _iniciarPollGamepadMenu();
 
         _polling = setInterval(_verificarSala, 1500);
 
@@ -509,6 +620,14 @@
       }
     }
 
+    // Polling de sala executado a cada 1.5s após criarSala().
+    // → Api.statusSala(_salaId) → { jogador1, jogador2, status, modo }
+    // Atualiza os slots de jogador na UI conforme eles entram.
+    // Quando status === 'pronto' ou 'em_jogo':
+    //   → Para o polling
+    //   → Oculta painelQR e btnVoltar
+    //   → Chama Game.iniciarFluxo(modo, _salaId, _tokenP1)
+    //     e Game.jogadoresEntraramprontos([nick1, nick2]) para iniciar o SELECT
     async function _verificarSala() {
       if (!_salaId) return;
       try {
@@ -521,7 +640,6 @@
           _atualizar_slot('slotP1', '✓ ' + sala.jogador1.nick, true);
         }
         if (sala.jogador2) {
-          _tokenP2 = sala.jogador2.token;
           _nickP2  = sala.jogador2.nick;
           _atualizar_slot('slotP2', '✓ ' + sala.jogador2.nick, true);
         }
@@ -542,11 +660,21 @@
       }
     }
 
+    // Cancela o setInterval de polling de sala.
+    // Chamada em: mostrarBotoesInicio, _verificarSala (ao confirmar sala), _ativarModoViaBotao.
     function _stopPolling() {
       if (_polling) { clearInterval(_polling); _polling = null; }
     }
 
     // ── Gamepad polling para overlays de menu ─────────────
+
+    // Inicia um loop RAF exclusivo para navegação de menu por gamepad.
+    // Separado do game loop de game.js — ativo apenas quando há painéis de UI visíveis.
+    // Detecta borda de subida em analógico horizontal/vertical e D-pad para _menuGamepadNavegar,
+    // e Cruz(0)/Bolinha(1) para _menuGamepadConfirmar.
+    // Evita disparo imediato inicializando prev com o estado atual na primeira leitura do pad.
+    // Chamada em: mostrarBotoesInicio, clicarSingle, criarSala, mostrarQrPlacar, mostrarNotifOffline.
+    // Parada em:  game:selectIniciado, esconderQrPlacar, continuarOffline, reiniciarApp.
     function _iniciarPollGamepadMenu() {
       if (_menuGamepadRAF) return;
       _menuGamepadPrev = {};
@@ -562,25 +690,34 @@
           if (!_menuGamepadPrev[gi]) {
             _menuGamepadPrev[gi] = {
               h:    pad.axes[0] || 0,
+              v:    pad.axes[1] || 0,
               btns: Array.from({length: pad.buttons.length}, (_, b) =>
                       !!(pad.buttons[b] && pad.buttons[b].pressed))
             };
             continue;
           }
           const prev = _menuGamepadPrev[gi];
-          const dz = 0.4;
+          const dz = 0.3;
           const h  = pad.axes[0] || 0;
+          const v  = pad.axes[1] || 0;
           const curLeft  = h < -dz || !!(pad.buttons[14] && pad.buttons[14].pressed);
           const curRight = h >  dz || !!(pad.buttons[15] && pad.buttons[15].pressed);
+          const curUp    = v < -dz || !!(pad.buttons[12] && pad.buttons[12].pressed);
+          const curDown  = v >  dz || !!(pad.buttons[13] && pad.buttons[13].pressed);
           const prevLeft  = prev.h < -dz || prev.btns[14];
           const prevRight = prev.h >  dz || prev.btns[15];
+          const prevUp    = prev.v < -dz || prev.btns[12];
+          const prevDown  = prev.v >  dz || prev.btns[13];
           if (curLeft  && !prevLeft)  _menuGamepadNavegar(-1);
           if (curRight && !prevRight) _menuGamepadNavegar(1);
+          if (curUp    && !prevUp)    _menuGamepadNavegar(-1);
+          if (curDown  && !prevDown)  _menuGamepadNavegar(1);
           prev.h = h;
+          prev.v = v;
           for (let b = 0; b < pad.buttons.length; b++) {
             const pressed = !!(pad.buttons[b] && pad.buttons[b].pressed);
-            // Botoes 12-15 sao o dpad — usados para navegacao, nao confirmacao
-            if (pressed && !prev.btns[b] && b < 12) _menuGamepadConfirmar();
+            // Somente Cruz(0) e Bolinha(1) confirmam — os demais sao navegacao ou acao
+            if (pressed && !prev.btns[b] && (b === 0 || b === 1)) _menuGamepadConfirmar();
             prev.btns[b] = pressed;
           }
         }
@@ -588,11 +725,14 @@
       _menuGamepadRAF = requestAnimationFrame(poll);
     }
 
+    // Para o loop RAF de navegação de gamepad no menu e limpa o estado prev.
     function _pararPollGamepadMenu() {
       if (_menuGamepadRAF) { cancelAnimationFrame(_menuGamepadRAF); _menuGamepadRAF = null; }
       _menuGamepadPrev = {};
     }
 
+    // Move o foco entre os elementos retornados por obterElementosFocaveis().
+    // dir: -1 (esquerda/cima) ou +1 (direita/baixo). Wraps em ambos os extremos.
     function _menuGamepadNavegar(dir) {
       const els = obterElementosFocaveis();
       if (!els.length) return;
@@ -600,11 +740,14 @@
       atualizarFoco();
     }
 
+    // Simula clique no elemento focado — equivale ao Enter/Espaço do teclado.
     function _menuGamepadConfirmar() {
       const els = obterElementosFocaveis();
       if (els[_focusIdx]) els[_focusIdx].click();
     }
 
+    // Atualiza o texto e a classe CSS de um slot de jogador no painelQR.
+    // id: 'slotP1' | 'slotP2' | conectado: true → verde, false → cinza.
     function _atualizar_slot(id, texto, conectado) {
       const el = document.getElementById(id);
       if (!el) return;
@@ -614,18 +757,29 @@
     }
 
     // ── Legendas de controle ──────────────────────────────
+
+    // Exibe a legenda de teclado do P1 (sempre) e do P2 (só em modo multi).
+    // Chamada pelo listener game:lutaIniciou.
     function mostrarLegendas() {
       document.getElementById('legendaP1').classList.add('visible');
       if (_modo === 'multi') {
         document.getElementById('legendaP2').classList.add('visible');
       }
     }
+
+    // Oculta as legendas de teclado dos dois jogadores.
+    // Chamada ao sair da luta: game:gameOver, game:telaInicial, _ativarModoViaBotao.
     function esconderLegendas() {
       document.getElementById('legendaP1').classList.remove('visible');
       document.getElementById('legendaP2').classList.remove('visible');
     }
 
     // ── QR Code do placar ─────────────────────────────────
+
+    // Exibe o overlay de placar com o QR Code gerado pelo backend.
+    // Chamada 2.5s após game:gameOver (tempo da animação de GAME OVER no canvas).
+    // → Api.placarQR() → { qr_base64 } → exibe como data URI em #qrPlacarImg.
+    // Se offline ou API falhar, o overlay ainda aparece (sem a imagem QR).
     async function mostrarQrPlacar() {
       const overlay = document.getElementById('qrPlacarOverlay');
       const img     = document.getElementById('qrPlacarImg');
@@ -646,17 +800,101 @@
       _iniciarPollGamepadMenu();
     }
 
+    // Oculta o overlay de placar e para o poll de gamepad de menu.
+    // Chamada por voltarMenuPosPlacar() e _ativarModoViaBotao().
     function esconderQrPlacar() {
       document.getElementById('qrPlacarOverlay').classList.remove('visible');
       _pararPollGamepadMenu();
     }
 
+    // Fecha o QR do placar e dispara game:telaInicial para que game.js
+    // e o listener deste arquivo restaurem a tela inicial.
+    // Chamada pelo onclick de #btnPularPlacar.
     function voltarMenuPosPlacar() {
       esconderQrPlacar();
       document.dispatchEvent(new CustomEvent('game:telaInicial'));
     }
 
+    // ── Atalhos globais de gamepad: L2 = single, R2 = multi ──
+
+    // Loop RAF sempre ativo, independente do game loop e de painéis abertos.
+    // Monitora apenas L2 (btn 6) e R2 (btn 7) nos dois primeiros pads.
+    // Usa _shortcutPrev separado para não interferir com _menuGamepadPrev nem Controls.prev.
+    // Na primeira leitura do pad inicializa prev para não disparar em botões já pressionados.
+    // Borda de subida em L2 → _ativarModoViaBotao('single')
+    // Borda de subida em R2 → _ativarModoViaBotao('multi')
+    function _iniciarShortcutsGamepad() {
+      function poll() {
+        requestAnimationFrame(poll);
+        if (!navigator.getGamepads) return;
+        const pads = navigator.getGamepads();
+        for (let gi = 0; gi < 2; gi++) {
+          const pad = pads[gi];
+          if (!pad || !pad.connected) { _shortcutPrev[gi] = null; continue; }
+          if (!_shortcutPrev[gi]) {
+            // Primeira leitura: inicializa prev para nao disparar em botoes ja pressionados
+            _shortcutPrev[gi] = {
+              l2: !!(pad.buttons[6] && pad.buttons[6].pressed),
+              r2: !!(pad.buttons[7] && pad.buttons[7].pressed)
+            };
+            continue;
+          }
+          const l2 = !!(pad.buttons[6] && pad.buttons[6].pressed);
+          const r2 = !!(pad.buttons[7] && pad.buttons[7].pressed);
+          if (l2 && !_shortcutPrev[gi].l2) _ativarModoViaBotao('single');
+          if (r2 && !_shortcutPrev[gi].r2) _ativarModoViaBotao('multi');
+          _shortcutPrev[gi].l2 = l2;
+          _shortcutPrev[gi].r2 = r2;
+        }
+      }
+      requestAnimationFrame(poll);
+    }
+
+    // Trata o pressionamento de L2/R2 conforme o estado atual do jogo.
+    //
+    // Na tela inicial (TELA_INICIAL ou estado vazio):
+    //   L2 → clicarSingle()   R2 → clicarMulti()
+    //   Controls.resetInput() é chamado antes para evitar que o input vaze para o SELECT.
+    //
+    // Durante qualquer outra tela (SELECT, FIGHTING, COUNTDOWN, ROUND_END, GAME_OVER):
+    //   Cancela a sala (Api.cancelarSala fire-and-forget) e volta ao menu principal.
+    //   Game.voltarInicio() é chamado para que game.js retorne ao estado TELA_INICIAL
+    //   e dispare o CustomEvent game:telaInicial, restaurando a UI.
+    //   O usuário então escolhe o modo manualmente — sem disparo automático de clicarSingle/Multi.
+    function _ativarModoViaBotao(modo) {
+      const estado = Game.getState ? Game.getState() : '';
+      const naInicial = (estado === 'TELA_INICIAL' || estado === '');
+
+      if (naInicial) {
+        // Fora de partida: atalho direto para o modo
+        Controls.resetInput();
+        if (modo === 'single') clicarSingle(); else clicarMulti();
+        return;
+      }
+
+      // Durante partida (FIGHTING, SELECT, COUNTDOWN, ROUND_END, GAME_OVER):
+      // encerra tudo e volta ao menu — o usuário escolhe o modo manualmente
+      _stopPolling();
+      if (_salaId) {
+        try { Api.cancelarSala(_salaId); } catch(e) {}
+        _salaId = null; _tokenP1 = null; _nickP1 = null; _nickP2 = null;
+      }
+      Game.voltarInicio();
+      esconderQrPlacar();
+      esconder('painelQR');
+      esconder('painelDificuldade');
+      esconderLegendas();
+      esconderMsg();
+      document.getElementById('btnVoltar').classList.remove('visible');
+      Controls.resetInput();
+      mostrarBotoesInicio();
+    }
+
     // ── Modo Offline ──────────────────────────────────────
+
+    // Exibe a notificação de "Sem internet" e seta _modoOffline = true.
+    // Chamada no boot quando Api.verificarConexao() retorna false.
+    // Inicia o poll de gamepad de menu com foco padrão em "Continuar offline" (índice 1).
     function mostrarNotifOffline() {
       _modoOffline = true;
       document.getElementById('notifOffline').classList.add('visible');
@@ -665,6 +903,9 @@
       _iniciarPollGamepadMenu();
     }
 
+    // Fecha a notificação offline e retorna o foco para a tela inicial.
+    // Chamada pelo onclick de #notifBtnContinuar.
+    // Para o poll de gamepad de menu (será reiniciado por mostrarBotoesInicio se necessário).
     function continuarOffline() {
       document.getElementById('notifOffline').classList.remove('visible');
       _pararPollGamepadMenu();
@@ -672,6 +913,9 @@
       atualizarFoco();
     }
 
+    // Reinicia o processo Electron via IPC.
+    // Chamada pelo onclick de #notifBtnReiniciar quando o usuário quer tentar reconectar.
+    // ipcRenderer.send('restart-app') → main.js recebe e chama app.relaunch() + app.quit().
     function reiniciarApp() {
       _pararPollGamepadMenu();
       const { ipcRenderer } = require('electron');
@@ -679,6 +923,12 @@
     }
 
     // ── Navegação por teclado no menu ─────────────────────
+
+    // Listener global de keydown registrado no boot.
+    // Só age quando o jogo não está em FIGHTING, SELECT, COUNTDOWN ou ROUND_END
+    // (esses estados usam inputs de controles.js, não de menu).
+    // Teclas de navegação: setas + WASD movem o foco; Enter/Espaço/K/Numpad2 confirmam.
+    // Chama obterElementosFocaveis() para descobrir o conjunto de botões da tela atual.
     function tratarTeclaMenu(e) {
       const estado = Game.getState ? Game.getState() : '';
       if (estado === 'FIGHTING' || estado === 'SELECT' ||
@@ -709,6 +959,13 @@
       }
     }
 
+    // Retorna a lista de elementos focáveis da tela atual (em ordem de foco).
+    // Prioridade de overlays: notifOffline > qrPlacarOverlay > tela normal (_telaAtual).
+    // Telas normais:
+    //   'inicial'     → [btnSingle, btnMulti]
+    //   'dificuldade' → todos os .btn-dif em #painelDificuldade
+    //   'qr'          → [btnVoltar]
+    //   'jogando'     → [] (game loop controla os inputs)
     function obterElementosFocaveis() {
       // Overlays tem prioridade, independente de _telaAtual
       if (document.getElementById('notifOffline').classList.contains('visible')) {
@@ -735,6 +992,9 @@
       return [];
     }
 
+    // Aplica a classe CSS .focused ao elemento em _focusIdx da lista focável atual.
+    // Remove .focused de todos antes de aplicar, garantindo um único elemento focado.
+    // Também chama .focus() para compatibilidade com acessibilidade e CSS :focus.
     function atualizarFoco() {
       document.querySelectorAll('.focused').forEach(el => el.classList.remove('focused'));
       const elementos = obterElementosFocaveis();
@@ -745,9 +1005,12 @@
     }
 
     // ── Utils ─────────────────────────────────────────────
+
+    // Exibe/oculta um elemento pelo ID via display block/none.
     function mostrar(id)  { const el = document.getElementById(id); if (el) el.style.display = 'block'; }
     function esconder(id) { const el = document.getElementById(id); if (el) el.style.display = 'none'; }
 
+    // Exibe uma mensagem em #msgErro. tipo 'erro' usa vermelho e auto-oculta em 4s.
     function mostrarMsg(txt, tipo) {
       const el = document.getElementById('msgErro');
       el.textContent = txt;

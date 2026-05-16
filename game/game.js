@@ -1,13 +1,31 @@
-// game.js - Logica principal do Arcade Fight
-// Canvas 1280x720, fisica, combate, IA, integracao com backend
+// =============================================================================
+// game.js — Lógica principal do Arcade Fight
+// Canvas 1280×720 | Física 2D | Combate | IA | Integração com backend
+//
+// Dependências (carregadas antes deste arquivo via index.html):
+//   sprites.js  → window.SpriteManager, window.PERSONAGENS_DEF, window.ANIM_MAP
+//   controls.js → window.Controls
+//   api.js      → window.Api
+//
+// Eventos CustomEvent disparados para o index.html:
+//   'game:selectIniciado' → oculta menus, troca tela para SELECT
+//   'game:lutaIniciou'    → exibe legendas de controle
+//   'game:gameOver'       → inicia contagem para exibir QR do placar
+//
+// Evento CustomEvent escutado vindo do index.html:
+//   'game:telaInicial'    → retorna ao menu principal após o QR do placar
+// =============================================================================
 
-// Constantes -------------------------------------------------------
-const W = 1280, H = 720;
-const CHAO = H - 130;
-const GRAVIDADE = 0.55;
-const PULO_FORCA = -14;
+// ── Constantes de tela e física ───────────────────────────────────────────────
+const W         = 1280;   // largura do canvas
+const H         = 720;    // altura do canvas
+const CHAO      = H - 130; // posição Y do chão (base dos personagens)
+const GRAVIDADE = 0.55;   // aceleração gravitacional por frame
+const PULO_FORCA = -14;   // impulso vertical do pulo
 
-// Caminho dos sprites - usa __dirname para portabilidade
+// ── Caminho base dos sprites ──────────────────────────────────────────────────
+// Usa __dirname (Electron/Node) para montar caminho absoluto.
+// Fallback para './sprites' em ambiente web sem Node.
 const SPRITES_PATH = (() => {
   try {
     const path = require('path');
@@ -17,192 +35,227 @@ const SPRITES_PATH = (() => {
   }
 })();
 
-const MULTI_DIFICULDADE = { facil: 1, medio: 1.5, dificil: 2.5 };
-
-// Estado global ---------------------------------------------------
+// ── Estado global do jogo ─────────────────────────────────────────────────────
 let canvas, ctx;
-let spriteManager;
+let spriteManager; // instância de SpriteManager (sprites.js)
+
+// Máquina de estados principal:
+// LOADING → TELA_INICIAL → SELECT → COUNTDOWN → FIGHTING → ROUND_END → GAME_OVER
 let gameState = 'LOADING';
-// Estados: LOADING | TELA_INICIAL | SELECT | COUNTDOWN |
-//          FIGHTING | ROUND_END | GAME_OVER
 
-let salaId      = null;
-let salaToken   = null;   // token JWT do P1 (usado para registrar resultado em single)
-let salaTokenP2 = null;   // token JWT do P2 (multi)
-let salaModo    = null;   // 'single' | 'multi'
+// Dados da sala online (null em modo offline)
+let salaId    = null;  // ID da sala no backend
+let salaToken = null;  // JWT do P1 usado para registrar resultado
+let salaModo  = null;  // 'single' | 'multi'
 
+// Nomes dos jogadores (preenchidos por jogadoresEntraramprontos)
 let nickP1 = 'P1';
 let nickP2 = 'P2';
 
-// Rounds
+// Controle de rounds (melhor de maxRounds)
 let roundAtual = 1;
 let maxRounds  = 3;
-let vitorias   = [0, 0];
+let vitorias   = [0, 0]; // [vitórias P1, vitórias P2]
 
-let dificuldadeIA = 'medio';
+let dificuldadeIA = 'medio'; // 'facil' | 'medio' | 'dificil'
 
-let fighters  = [];
-let projeteis = [];
+let fighters  = []; // [Fighter P1, Fighter P2]
+let projeteis = []; // projéteis ativos (especial do Mago)
 
+// Timers de transição entre estados
 let countdownVal   = 5;
 let countdownTimer = 0;
 let roundEndTimer  = 0;
 
-// Selecao de personagens -----------------------------------------
+// Seleção de personagens (tela SELECT)
 let selecao = {
-  cursor: [0, 1],
-  escolhido: [null, null]
+  cursor:   [0, 1],         // índice do personagem sob o cursor de cada player
+  escolhido: [null, null]   // índice do personagem confirmado (null = ainda escolhendo)
 };
 
-// ────────────────────────────────────────────────────────────
-// Classe Fighter
-// ────────────────────────────────────────────────────────────
+// =============================================================================
+// Classe Fighter — representa um lutador (player humano ou controlado pela IA)
+// =============================================================================
 class Fighter {
+  // playerIndex: 0 = P1 (esquerda), 1 = P2 (direita)
+  // personagemId: índice em PERSONAGENS_DEF (sprites.js)
+  // x: posição X inicial
   constructor(playerIndex, personagemId, x) {
+    // Lê a ficha do personagem de PERSONAGENS_DEF (definido em sprites.js)
     const def = PERSONAGENS_DEF[personagemId];
-    this.player      = playerIndex;
-    this.personagem  = personagemId;
-    this.def         = def;
-    this.nome        = 'Jogador';
 
-    this.x = x;
-    this.y = CHAO;
+    this.player     = playerIndex;
+    this.personagem = personagemId; // usado pelo SpriteManager para buscar frames
+    this.def        = def;          // referência à ficha: hp, dano, alcance, velocidade
+    this.nome       = 'Jogador';    // sobrescrito por jogadoresEntraramprontos()
+
+    // Posição e física
+    this.x  = x;
+    this.y  = CHAO;
     this.vx = 0;
     this.vy = 0;
-    this.w = 80;
-    this.h = 120;
+    this.w  = 80;   // largura da hitbox
+    this.h  = 120;  // altura da hitbox
 
+    // Status de combate
     this.hp    = def.hp;
     this.maxHp = def.hp;
     this.speed = def.velocidade;
 
     this.noChao    = true;
-    this.virado    = playerIndex === 1;
+    this.virado    = playerIndex === 1; // P2 começa virado para a esquerda
     this.bloqueando = false;
 
-    this.state    = 'IDLE';
+    // Animação: nome da animação atual + frame atual (lido pelo SpriteManager)
+    this.state     = 'IDLE';
     this.animState = { nome: 'IDLE', frame: 0, timer: 0 };
 
+    // Controle de ataque
     this.atacando        = false;
-    this.ataqueTick      = 0;
-    this.hitboxAtiva     = false;
-    this.invencivel      = false;
-    this.invincivelTimer = 0;
-    this.especialCd      = 0;
-    this.counterWindow   = 0;
-    this.stunTimer       = 0;
+    this.ataqueTick      = 0;    // ms restantes do ataque atual
+    this.hitboxAtiva     = false; // true = pode colidir com inimigo neste frame
+    this._danoAtual      = 0;    // dano do ataque em curso
 
-    this.pontos = 0;
+    // Mecânicas especiais
+    this.invencivel      = false;
+    this.invincivelTimer = 0;    // ms restantes de invencibilidade (Vampira)
+    this.especialCharge  = 0;   // 0–100; chega em 100 ao causar ~25% do próprio HP em dano
+    this.counterWindow   = 0;   // ms restantes para janela de counter (b4)
+    this.stunTimer       = 0;   // ms de stun pós-recebimento de dano
+
+    this.pontos = 0;    // acumulado de dano causado (enviado ao backend no fim)
     this.morreu = false;
   }
 
+  // Retorna o retângulo de colisão do corpo (x,y = canto superior-esquerdo)
   get hitbox() {
     return { x: this.x, y: this.y - this.h, w: this.w, h: this.h };
   }
 
+  // Retorna o retângulo de alcance do ataque atual.
+  // Usa def.alcance.especial durante SPECIAL, def.alcance.normal nos demais.
+  // Estende na direção em que o personagem está virado.
   get hitboxAtaque() {
+    const isEspecial = this.state === 'SPECIAL';
+    const w = isEspecial
+      ? (this.def.alcance ? this.def.alcance.especial : 70)
+      : (this.def.alcance ? this.def.alcance.normal   : 70);
     return {
-      x: this.virado ? this.x - 70 : this.x + this.w,
+      x: this.virado ? this.x - w : this.x + this.w,
       y: this.y - this.h * 0.8,
-      w: 70,
+      w,
       h: this.h * 0.6
     };
   }
 
+  // Executado a cada frame pelo updateFighting().
+  // input: Controls.getInput(player) — estado atual das teclas/gamepad
+  // inimigo: o Fighter adversário (para especiais direcionados)
+  // deltaMs: milissegundos desde o último frame
   update(input, inimigo, deltaMs) {
     if (this.morreu) return;
 
+    // Stun: paralisa o personagem mas mantém física e animação
     if (this.stunTimer > 0) {
       this.stunTimer -= deltaMs;
-      spriteManager.tickAnim(this.animState, deltaMs);
+      spriteManager.tickAnim(this.animState, deltaMs, this.personagem);
       this.vy += GRAVIDADE;
-      this.y += this.vy;
+      this.y  += this.vy;
       if (this.y >= CHAO) { this.y = CHAO; this.vy = 0; this.noChao = true; }
       return;
     }
 
-    if (this.especialCd > 0) this.especialCd -= deltaMs;
+    // Decrementa timers de mecânicas especiais
     if (this.invincivelTimer > 0) {
       this.invincivelTimer -= deltaMs;
       if (this.invincivelTimer <= 0) this.invencivel = false;
     }
     if (this.counterWindow > 0) this.counterWindow -= deltaMs;
 
-    // Ataque em andamento ----------------------------------
+    // Durante ataque: bloqueia novo input, apenas avança física e animação
     if (this.atacando) {
       this.ataqueTick -= deltaMs;
       if (this.ataqueTick <= 0) {
         this.atacando    = false;
         this.hitboxAtiva = false;
-        this.state = 'IDLE';
+        this.state       = 'IDLE';
       }
       this.vy += GRAVIDADE;
-      this.y += this.vy;
+      this.y  += this.vy;
       if (this.y >= CHAO) { this.y = CHAO; this.vy = 0; this.noChao = true; }
-      spriteManager.tickAnim(this.animState, deltaMs);
+      spriteManager.tickAnim(this.animState, deltaMs, this.personagem);
       return;
     }
 
-    // Movimento horizontal ---------------------------------
+    // ── Movimento horizontal ──
     let movendo = false;
     this.bloqueando = false;
 
     if (input.left) {
-      this.vx = -this.speed;
+      this.vx    = -this.speed;
       this.virado = true;
-      movendo = true;
+      movendo     = true;
     } else if (input.right) {
-      this.vx = this.speed;
+      this.vx    = this.speed;
       this.virado = false;
-      movendo = true;
+      movendo     = true;
     } else {
+      // Desaceleração com atrito
       this.vx *= 0.7;
       if (Math.abs(this.vx) < 0.3) this.vx = 0;
     }
 
-    // Defender (b2)
+    // ── Defender (b2 — L1 no gamepad) ──
     if (input.btn[2] && this.noChao) {
       this.bloqueando = true;
-      this.vx = 0;
-      this.state = 'DEFEND';
+      this.vx         = 0;
+      this.state      = 'DEFEND';
+      spriteManager.setAnim(this.animState, 'DEFEND');
     }
 
-    // Pulo (up)
+    // ── Pulo (up — W/Espaço teclado, Cruz gamepad, D-pad cima) ──
     if (input.up && this.noChao) {
-      this.vy = PULO_FORCA;
+      this.vy     = PULO_FORCA;
       this.noChao = false;
     }
 
-    // Ataques
+    // ── Ataques (bloqueados enquanto defendendo) ──
     if (!this.bloqueando) {
       if (Controls.justPressed(this.player, 'b0')) {
-        this._iniciarAtaque('ATTACK', this.def.dano.leve, 280);
+        // b0 = Bolinha gamepad / J teclado — ataque rápido
+        this._iniciarAtaque('ATTACK', this.def.dano.leve, 800);
       }
       else if (Controls.justPressed(this.player, 'b1')) {
-        this._iniciarAtaque('ATTACK2', this.def.dano.forte, 420);
+        // b1 = Quadrado gamepad / K teclado — ataque forte
+        this._iniciarAtaque('ATTACK2', this.def.dano.forte, 650);
       }
-      else if (Controls.justPressed(this.player, 'b3') && (this.especialCd || 0) <= 0) {
+      else if (Controls.justPressed(this.player, 'b3') && this.especialCharge >= 100) {
+        // b3 = Triângulo gamepad / I teclado — especial (requer carga completa)
         this._ativarEspecial(inimigo);
       }
       else if (Controls.justPressed(this.player, 'b4')) {
+        // b4 = R1 gamepad / U teclado — abre janela de counter por 300ms
         this.counterWindow = 300;
       }
     }
 
-    // Fisica
+    // ── Física ──
     this.vy += GRAVIDADE;
-    this.x += this.vx;
-    this.y += this.vy;
+    this.x  += this.vx;
+    this.y  += this.vy;
 
+    // Aterrissagem
     if (this.y >= CHAO) {
-      this.y = CHAO;
-      this.vy = 0;
+      this.y      = CHAO;
+      this.vy     = 0;
       this.noChao = true;
     }
 
+    // Limita às bordas do canvas
     this.x = Math.max(0, Math.min(W - this.w, this.x));
 
-    // Estado de animacao
+    // ── Seleção de animação ──
+    // Só troca se não estiver atacando ou defendendo (esses já definem animState)
     if (!this.atacando && !this.bloqueando) {
       if (!this.noChao) {
         spriteManager.setAnim(this.animState, 'JUMP');
@@ -215,80 +268,106 @@ class Fighter {
       }
     }
 
-    const done = spriteManager.tickAnim(this.animState, deltaMs);
-    if (done && (this.state === 'HIT')) {
+    // Avança o frame da animação atual (spriteManager controla fps por animação)
+    const done = spriteManager.tickAnim(this.animState, deltaMs, this.personagem);
+    // Ao terminar animação de HIT, volta para IDLE
+    if (done && this.state === 'HIT') {
       this.state = 'IDLE';
       spriteManager.setAnim(this.animState, 'IDLE');
     }
   }
 
+  // Inicia um ataque: define tipo, dano, duração e dispara a animação no SpriteManager.
+  // tipo: 'ATTACK' | 'ATTACK2' | 'SPECIAL'  (nomes de chave em ANIM_MAP de sprites.js)
   _iniciarAtaque(tipo, dano, durMs) {
     this.atacando    = true;
     this.ataqueTick  = durMs;
     this.hitboxAtiva = true;
     this.state       = tipo;
     this._danoAtual  = dano;
-    spriteManager.setAnim(this.animState, tipo);
+    spriteManager.setAnim(this.animState, tipo); // sprites.js — ANIM_MAP[tipo].pasta
   }
 
+  // Ativa o especial do personagem. Cada personagem tem comportamento único.
+  // Zera especialCharge antes de executar.
   _ativarEspecial(inimigo) {
-    this.especialCd = 4000;
-    spriteManager.setAnim(this.animState, 'SPECIAL');
+    this.especialCharge = 0;
 
     switch (this.personagem) {
-      case 0: // Espadachim - Lamina Veloz
-        this._iniciarAtaque('SPECIAL', this.def.dano.especial, 400);
+      case 0: // Espadachim — Lâmina Veloz: investida com corte em área
+        this._iniciarAtaque('SPECIAL', this.def.dano.especial, 700);
         break;
 
-      case 1: // Lutador - Impacto Sismico
+      case 1: // Lutador — Impacto Sísmico: salta e causa dano em área ao pousar
         if (this.noChao) {
           this.vy = PULO_FORCA * 0.6;
           this.noChao = false;
+          // _especial_pendente é verificado em updateFighting quando noChao volta a true
           this._especial_pendente = 'sismico';
+          this.atacando    = true;
+          this.ataqueTick  = 900;
+          this.hitboxAtiva = false; // dano aplicado no pouso, não durante o voo
+          this.state       = 'SPECIAL';
+          spriteManager.setAnim(this.animState, 'SPECIAL');
         }
         break;
 
-      case 2: // Mago - Tempestade Arcana
+      case 2: // Mago — Tempestade Arcana: dispara 3 projéteis com velocidades diferentes
         for (let i = 0; i < 3; i++) {
           projeteis.push({
-            x: this.x + this.w / 2,
-            y: this.y - this.h * 0.7,
-            vx: this.virado ? -(5 + i * 2) : (5 + i * 2),
-            vy: -1 + i * 0.5,
+            x:    this.x + this.w / 2,
+            y:    this.y - this.h * 0.7,
+            vx:   this.virado ? -(5 + i * 2) : (5 + i * 2),
+            vy:   -1 + i * 0.5,
             dano: 8,
-            dono: this.player,
-            vida: 120
+            dono: this.player, // índice do player dono (para não se autoacertar)
+            vida: 120          // frames de vida antes de desaparecer
           });
         }
+        this.atacando    = true;
+        this.ataqueTick  = 650;
+        this.hitboxAtiva = false; // dano está nos projéteis, não na hitbox do corpo
+        this.state       = 'SPECIAL';
+        spriteManager.setAnim(this.animState, 'SPECIAL');
         break;
 
-      case 3: // Vampira - Veu de Sangue
-        this.invencivel = true;
+      case 3: // Vampira — Véu de Sangue: 2s de invencibilidade total
+        this.invencivel      = true;
         this.invincivelTimer = 2000;
+        this.atacando        = true;
+        this.ataqueTick      = 550;
+        this.hitboxAtiva     = false;
+        this.state           = 'SPECIAL';
+        spriteManager.setAnim(this.animState, 'SPECIAL');
         break;
 
-      case 4: // Vampiro - Sombra Veloz
+      case 4: // Vampiro — Sombra Veloz: teleporta para trás do inimigo e ataca
         if (inimigo) {
           const offset = inimigo.virado ? 100 : -100;
           this.x = Math.max(0, Math.min(W - this.w, inimigo.x + offset));
-          this._iniciarAtaque('SPECIAL', this.def.dano.especial, 350);
+          this._iniciarAtaque('SPECIAL', this.def.dano.especial, 700);
         }
         break;
     }
   }
 
+  // Aplica dano recebido. Retorna o dano real causado (0 se counter ou invencível).
+  // atacante: Fighter que causou o dano (pode ser null para dano ambiental)
   receberDano(dano, atacante) {
     if (this.morreu || this.invencivel) return 0;
 
+    // Janela de counter ativa: reverte o golpe para o atacante com 1.5× de dano
     if (this.counterWindow > 0) {
       atacante && atacante._iniciarAtaque('ATTACK2', atacante.def.dano.forte * 1.5, 300);
       this.counterWindow = 0;
       return 0;
     }
 
+    // Bloqueio reduz o dano para 30%
     const dmgReal = this.bloqueando ? Math.ceil(dano * 0.3) : dano;
 
     this.hp = Math.max(0, this.hp - dmgReal);
+    // Stun menor ao bloquear (80ms) vs receber dano direto (200ms)
     this.stunTimer = this.bloqueando ? 80 : 200;
     spriteManager.setAnim(this.animState, 'HIT');
 
@@ -297,16 +376,28 @@ class Fighter {
       spriteManager.setAnim(this.animState, 'DEATH');
     }
 
-    if (atacante) atacante.pontos += dmgReal;
+    if (atacante) {
+      atacante.pontos += dmgReal;
+      // Carga especial: causar 25% do próprio HP máximo em dano enche a barra
+      atacante.especialCharge = Math.min(100,
+        atacante.especialCharge + dmgReal * 400 / atacante.maxHp);
+    }
+
     return dmgReal;
   }
 
+  // Renderiza o personagem no canvas.
+  // Delega ao SpriteManager.draw() que busca o frame correto em animState.
+  // Efeito de piscar (globalAlpha) aplicado enquanto invencível.
   draw() {
     if (!spriteManager) return;
     const hb = this.hitbox;
+
+    // spriteManager.draw lê sprites/{personagem}/{animacao}/{frame}.png
     spriteManager.draw(ctx, this.personagem, this.animState,
       hb.x, hb.y, this.w, this.h, this.virado);
 
+    // Brilho branco piscando durante invencibilidade (Vampira)
     if (this.invencivel && Math.floor(Date.now() / 100) % 2 === 0) {
       ctx.save();
       ctx.globalAlpha = 0.4;
@@ -315,6 +406,7 @@ class Fighter {
       ctx.restore();
     }
 
+    // Nome do jogador acima do personagem
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 13px monospace';
     ctx.textAlign = 'center';
@@ -322,127 +414,140 @@ class Fighter {
   }
 }
 
-// ────────────────────────────────────────────────────────────
-// IA
-// ────────────────────────────────────────────────────────────
+// =============================================================================
+// Classe IA — controla o Fighter do CPU em modo single player
+// =============================================================================
 class IA {
+  // fighter: o Fighter que a IA controla (sempre P2)
+  // dificuldade: 'facil' | 'medio' | 'dificil'
   constructor(fighter, dificuldade) {
-    this.f = fighter;
+    this.f     = fighter;
     this.nivel = dificuldade;
-    this.timer = 0;
-    this.acao  = null;
+    this.timer = 0;   // tempo até reavaliação da próxima ação
+    this.acao  = null; // 'atacar' | 'aproximar'
   }
 
+  // Executado a cada frame por updateFighting().
+  // Simula input humano escrevendo diretamente em Controls.state[player],
+  // espelhando o estado anterior em Controls.prev para que justPressed() funcione.
   update(inimigo, deltaMs) {
     const f = this.f;
     if (f.morreu) return;
 
     this.timer -= deltaMs;
 
-    const dist  = Math.abs(f.x - inimigo.x);
-    const alcance = { facil: 200, medio: 140, dificil: 90 }[this.nivel];
-    const react   = { facil: 600, medio: 350, dificil: 150 }[this.nivel];
+    // Parâmetros que variam por dificuldade
+    const dist         = Math.abs(f.x - inimigo.x);
+    const alcance      = { facil: 200, medio: 140,  dificil: 90  }[this.nivel];
+    const react        = { facil: 600, medio: 350,  dificil: 150 }[this.nivel];
     const agressividade = { facil: 0.3, medio: 0.55, dificil: 0.8 }[this.nivel];
 
-    const inp = { left: false, right: false, up: false, down: false, btn: [false, false, false, false, false] };
+    const inp = { left: false, right: false, up: false, down: false,
+                  btn: [false, false, false, false, false] };
 
+    // Reavalia ação quando o timer expira (intervalo aleatorizado por dificuldade)
     if (this.timer <= 0) {
       this.timer = react + Math.random() * react;
-      this.acao = Math.random() < agressividade ? 'atacar' : 'aproximar';
+      this.acao  = Math.random() < agressividade ? 'atacar' : 'aproximar';
     }
 
+    // Movimento: aproxima se fora do alcance, recua se muito perto
     if (dist > alcance) {
       inp[f.x < inimigo.x ? 'right' : 'left'] = true;
     } else if (dist < 60 && Math.random() < 0.3) {
       inp[f.x < inimigo.x ? 'left' : 'right'] = true;
     }
 
+    // Ataques aleatorizados quando dentro do alcance e em modo 'atacar'
     if (dist <= alcance && this.acao === 'atacar') {
       const r = Math.random();
-      if (r < 0.5)        inp.btn[0] = true;
-      else if (r < 0.75)  inp.btn[1] = true;
-      else if (r < 0.85)  inp.btn[3] = true;
-      else                inp.btn[2] = true;
+      if      (r < 0.50) inp.btn[0] = true; // ataque rápido
+      else if (r < 0.75) inp.btn[1] = true; // ataque forte
+      else if (r < 0.85) inp.btn[3] = true; // especial
+      else               inp.btn[2] = true; // defender
     }
 
-    if (Math.random() < (0.002 * ({ facil: 1, medio: 2, dificil: 3 }[this.nivel]))) {
+    // Pulo ocasional (mais frequente em dificuldades maiores)
+    if (Math.random() < 0.002 * ({ facil: 1, medio: 2, dificil: 3 }[this.nivel])) {
       inp.up = true;
     }
 
-    // Salva o "prev" (estado anterior real) antes de sobrescrever
-    Controls.prev[f.player] = {
-      left:  Controls.state[f.player].left,
-      right: Controls.state[f.player].right,
-      up:    Controls.state[f.player].up,
-      down:  Controls.state[f.player].down,
-      btn:   [...Controls.state[f.player].btn]
-    };
-    Controls.state[f.player] = {
-      left: inp.left, right: inp.right, up: inp.up, down: inp.down,
-      btn: [...inp.btn]
-    };
+    // Escreve no Controls para que Fighter.update() leia normalmente
+    Controls.prev[f.player]  = { ...Controls.state[f.player], btn: [...Controls.state[f.player].btn] };
+    Controls.state[f.player] = { left: inp.left, right: inp.right, up: inp.up, down: inp.down, btn: [...inp.btn] };
   }
 }
 
-// ────────────────────────────────────────────────────────────
-// Inicializacao
-// ────────────────────────────────────────────────────────────
+// =============================================================================
+// Inicialização
+// =============================================================================
+
+// Configura canvas, carrega sprites e inicia o game loop.
+// Chamado por Game.init() (exposto ao index.html).
 async function init() {
-  canvas = document.getElementById('gameCanvas');
-  ctx    = canvas.getContext('2d');
+  canvas        = document.getElementById('gameCanvas');
+  ctx           = canvas.getContext('2d');
   canvas.width  = W;
   canvas.height = H;
 
-  Controls.init();
+  // Inicializa o sistema de controles (teclado + gamepad)
+  Controls.init(); // controls.js
 
-  spriteManager = new SpriteManager(SPRITES_PATH);
+  // Carrega todas as animações de todos os personagens a partir de SPRITES_PATH
+  // sprites/{personagem}/{animacao}/0.png, 1.png, ...
+  spriteManager = new SpriteManager(SPRITES_PATH); // sprites.js
   await spriteManager.carregar();
 
   gameState = 'TELA_INICIAL';
   requestAnimationFrame(loop);
 }
 
-// ────────────────────────────────────────────────────────────
+// =============================================================================
 // Game Loop
-// ────────────────────────────────────────────────────────────
+// =============================================================================
+
 let lastTime = 0;
+
+// Loop principal: atualiza controles, lógica e renderização a cada frame.
+// delta é limitado a 50ms para evitar saltos grandes em abas inativas.
 function loop(ts) {
   const delta = Math.min(ts - lastTime, 50);
   lastTime = ts;
 
-  Controls.update();
-
+  Controls.update(); // lê teclado e gamepad, salva estado anterior
   update(delta);
   render();
 
   requestAnimationFrame(loop);
 }
 
-// ────────────────────────────────────────────────────────────
-// Update
-// ────────────────────────────────────────────────────────────
+// =============================================================================
+// Update — despacha para a função correta conforme o estado atual
+// =============================================================================
 function update(delta) {
   switch (gameState) {
-    case 'TELA_INICIAL':    /* index.html cuida */    break;
-    case 'SELECT':          updateSelect(delta);      break;
-    case 'COUNTDOWN':       updateCountdown(delta);   break;
-    case 'FIGHTING':        updateFighting(delta);    break;
-    case 'ROUND_END':       updateRoundEnd(delta);    break;
-    case 'GAME_OVER':       updateGameOver(delta);    break;
+    case 'TELA_INICIAL': /* gerenciado pelo index.html */    break;
+    case 'SELECT':       updateSelect();                     break;
+    case 'COUNTDOWN':    updateCountdown(delta);             break;
+    case 'FIGHTING':     updateFighting(delta);              break;
+    case 'ROUND_END':    updateRoundEnd(delta);              break;
+    case 'GAME_OVER':    /* aguarda interação no index.html */ break;
   }
 }
 
-// ────────────────────────────────────────────────────────────
-// SELECT - tela de selecao de personagens
-// ────────────────────────────────────────────────────────────
-function updateSelect(delta) {
-  const totalPersonagens = PERSONAGENS_DEF.length;
+// =============================================================================
+// SELECT — tela de escolha de personagens
+// =============================================================================
+
+// Lê input dos jogadores para mover cursores e confirmar escolhas.
+// CPU (single player) escolhe automaticamente um personagem diferente do P1.
+function updateSelect() {
+  const totalPersonagens = PERSONAGENS_DEF.length; // vem de sprites.js
   const numPlayers = (salaModo === 'single') ? 1 : 2;
 
   for (let p = 0; p < numPlayers; p++) {
     if (selecao.escolhido[p] !== null) continue;
 
-    // Mover cursor
     if (Controls.justPressed(p, 'left')) {
       selecao.cursor[p] = (selecao.cursor[p] - 1 + totalPersonagens) % totalPersonagens;
     }
@@ -450,19 +555,17 @@ function updateSelect(delta) {
       selecao.cursor[p] = (selecao.cursor[p] + 1) % totalPersonagens;
     }
 
-    // CONFIRMAR com PULO (up): W/Espaco para P1, Seta Cima para P2
+    // Confirmar com 'up' (W/Espaço teclado, Cruz gamepad, D-pad cima)
     if (Controls.justPressed(p, 'up')) {
-      const escolha = selecao.cursor[p];
-      const outroPlayer = (p === 0) ? 1 : 0;
-      // Nao permite escolher mesmo personagem que o outro player ja confirmou
-      if (numPlayers === 2 && selecao.escolhido[outroPlayer] === escolha) {
-        continue;
-      }
+      const escolha      = selecao.cursor[p];
+      const outroPlayer  = p === 0 ? 1 : 0;
+      // Impede dois jogadores escolherem o mesmo personagem
+      if (numPlayers === 2 && selecao.escolhido[outroPlayer] === escolha) continue;
       selecao.escolhido[p] = escolha;
     }
   }
 
-  // Single player: CPU escolhe um personagem diferente
+  // CPU escolhe aleatoriamente assim que P1 confirmar
   if (numPlayers === 1 && selecao.escolhido[0] !== null && selecao.escolhido[1] === null) {
     let escolhaCpu;
     do {
@@ -472,12 +575,13 @@ function updateSelect(delta) {
     selecao.cursor[1]    = escolhaCpu;
   }
 
-  const todosProntos = (selecao.escolhido[0] !== null && selecao.escolhido[1] !== null);
-  if (todosProntos) iniciarPartidaComEscolhas();
+  if (selecao.escolhido[0] !== null && selecao.escolhido[1] !== null) {
+    iniciarPartidaComEscolhas();
+  }
 }
 
+// Instancia os dois Fighters com os personagens escolhidos e inicia o countdown.
 function iniciarPartidaComEscolhas() {
-  fighters  = [];
   projeteis = [];
 
   const f1 = new Fighter(0, selecao.escolhido[0], 200);
@@ -486,6 +590,7 @@ function iniciarPartidaComEscolhas() {
   f2.nome = nickP2;
 
   fighters = [f1, f2];
+  // IA controla P2 apenas em single player
   ia = (salaModo === 'single') ? new IA(f2, dificuldadeIA) : null;
 
   roundAtual     = 1;
@@ -495,9 +600,12 @@ function iniciarPartidaComEscolhas() {
   gameState      = 'COUNTDOWN';
 }
 
-// ────────────────────────────────────────────────────────────
-// COUNTDOWN
-// ────────────────────────────────────────────────────────────
+// =============================================================================
+// COUNTDOWN — contagem regressiva antes da luta
+// =============================================================================
+
+// Decrementa o contador a cada segundo. Ao chegar em zero, inicia FIGHTING
+// e dispara 'game:lutaIniciou' para o index.html exibir as legendas de controle.
 function updateCountdown(delta) {
   countdownTimer -= delta;
   if (countdownTimer <= 0) {
@@ -505,49 +613,56 @@ function updateCountdown(delta) {
     countdownTimer = 1000;
     if (countdownVal <= 0) {
       gameState = 'FIGHTING';
-      // Avisa o index.html que a luta comecou (mostra legendas)
       document.dispatchEvent(new CustomEvent('game:lutaIniciou'));
     }
   }
 }
 
-// ────────────────────────────────────────────────────────────
-// FIGHTING
-// ────────────────────────────────────────────────────────────
-let ia = null;
+// =============================================================================
+// FIGHTING — lógica principal de combate
+// =============================================================================
+
+let ia = null; // instância de IA ativa (null em multi)
+
 function updateFighting(delta) {
   if (fighters.length < 2) return;
 
   const [f1, f2] = fighters;
 
+  // IA escreve em Controls.state[1] antes de f2.update() ler
   if (ia) ia.update(f1, delta);
 
+  // Atualiza física, input e animações de cada lutador
   f1.update(Controls.getInput(0), f2, delta);
   f2.update(Controls.getInput(1), f1, delta);
 
+  // Verifica colisão de hitboxes de ataque
   _checarHit(f1, f2);
   _checarHit(f2, f1);
 
-  _atualizarProjeteis(delta, f1, f2);
+  // Move projéteis e verifica colisão com alvos
+  _atualizarProjeteis(f1, f2);
 
+  // Impacto sísmico do Lutador: dano em área ao pousar
   [f1, f2].forEach(f => {
     if (f._especial_pendente === 'sismico' && f.noChao) {
       const alvo = f === f1 ? f2 : f1;
-      if (Math.abs(f.x - alvo.x) < 160) {
-        alvo.receberDano(f.def.dano.especial, f);
-      }
+      if (Math.abs(f.x - alvo.x) < 160) alvo.receberDano(f.def.dano.especial, f);
       f._especial_pendente = null;
     }
   });
 
+  // Fim do round quando um dos lutadores morre
   if (f1.morreu || f2.morreu) {
     const venceuIdx = f1.morreu ? 1 : 0;
     vitorias[venceuIdx]++;
-    gameState = 'ROUND_END';
-    roundEndTimer = 2500;
+    gameState     = 'ROUND_END';
+    roundEndTimer = 2500; // 2.5s para exibir o resultado antes de continuar
   }
 }
 
+// Verifica se a hitbox de ataque do atacante intercepta o corpo do alvo.
+// Desativa hitboxAtiva após o primeiro acerto para evitar multi-hit.
 function _checarHit(atacante, alvo) {
   if (!atacante.hitboxAtiva || atacante.morreu) return;
 
@@ -561,24 +676,31 @@ function _checarHit(atacante, alvo) {
   }
 }
 
-function _atualizarProjeteis(delta, f1, f2) {
+// Move todos os projéteis, remove os que saíram da tela ou acertaram o alvo.
+function _atualizarProjeteis(f1, f2) {
   projeteis = projeteis.filter(p => {
     p.x += p.vx;
     p.y += p.vy;
     p.vida--;
 
     const alvo = p.dono === 0 ? f2 : f1;
-    const hd = alvo.hitbox;
+    const hd   = alvo.hitbox;
 
     if (p.x > hd.x && p.x < hd.x + hd.w && p.y > hd.y && p.y < hd.y + hd.h) {
       alvo.receberDano(p.dano, fighters[p.dono]);
-      return false;
+      return false; // remove o projétil ao acertar
     }
 
     return p.vida > 0 && p.x > 0 && p.x < W;
   });
 }
 
+// =============================================================================
+// ROUND_END — intervalo entre rounds
+// =============================================================================
+
+// Aguarda roundEndTimer ms. Se alguém tiver 2 vitórias ou rodou maxRounds,
+// encerra a partida (GAME_OVER + API). Caso contrário, inicia o próximo round.
 function updateRoundEnd(delta) {
   roundEndTimer -= delta;
   if (roundEndTimer <= 0) {
@@ -591,29 +713,25 @@ function updateRoundEnd(delta) {
   }
 }
 
-function updateGameOver(delta) {
-  // Nao faz nada: o index.html mostra o QR do placar por 10s
-  // e depois dispara 'game:telaInicial' para voltar ao menu.
-}
-
-// ────────────────────────────────────────────────────────────
-// Render
-// ────────────────────────────────────────────────────────────
+// =============================================================================
+// Render — despacha para as funções de desenho conforme o estado
+// =============================================================================
 function render() {
   ctx.clearRect(0, 0, W, H);
   _drawBg();
 
   switch (gameState) {
-    case 'LOADING':         _drawLoading();        break;
-    case 'TELA_INICIAL':    _drawTelaInicial();    break;
-    case 'SELECT':          _drawSelect();         break;
+    case 'LOADING':      _drawLoading();                          break;
+    case 'TELA_INICIAL': _drawTelaInicial();                      break;
+    case 'SELECT':       _drawSelect();                           break;
     case 'COUNTDOWN':
-    case 'FIGHTING':        _drawGame();           break;
-    case 'ROUND_END':       _drawGame(); _drawRoundEnd();  break;
-    case 'GAME_OVER':       _drawGame(); _drawGameOver(); break;
+    case 'FIGHTING':     _drawGame();                             break;
+    case 'ROUND_END':    _drawGame(); _drawRoundEnd();            break;
+    case 'GAME_OVER':    _drawGame(); _drawGameOver();            break;
   }
 }
 
+// Fundo gradiente escuro. Adiciona piso e linha vermelha durante o combate.
 function _drawBg() {
   const grad = ctx.createLinearGradient(0, 0, 0, H);
   grad.addColorStop(0, '#0f0f1a');
@@ -634,6 +752,7 @@ function _drawBg() {
   }
 }
 
+// Tela exibida enquanto os sprites ainda estão sendo carregados do disco.
 function _drawLoading() {
   ctx.fillStyle = '#fff';
   ctx.font = 'bold 32px monospace';
@@ -641,13 +760,27 @@ function _drawLoading() {
   ctx.fillText('Carregando sprites...', W / 2, H / 2);
 }
 
+// Título animado na tela inicial (os botões de modo são HTML no index.html).
+function _drawTelaInicial() {
+  ctx.fillStyle = '#e94560';
+  ctx.font = 'bold 90px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('ARCADE', W / 2, H / 2 - 60);
+  ctx.fillText('FIGHT',  W / 2, H / 2 + 20);
+
+  ctx.fillStyle = '#aaa';
+  ctx.font = '18px monospace';
+  ctx.fillText('Selecione um modo de jogo abaixo', W / 2, H / 2 + 90);
+}
+
+// Desenha HUD, personagens (via SpriteManager), projéteis e countdown (se ativo).
 function _drawGame() {
   if (fighters.length < 2) return;
 
   _drawHUD();
+  fighters.forEach(f => f.draw()); // cada Fighter chama spriteManager.draw()
 
-  fighters.forEach(f => f.draw());
-
+  // Projéteis do Mago desenhados como círculos amarelos
   ctx.fillStyle = '#ffeb3b';
   projeteis.forEach(p => {
     ctx.beginPath();
@@ -658,90 +791,73 @@ function _drawGame() {
   if (gameState === 'COUNTDOWN') _drawCountdown();
 }
 
+// HUD: barras de HP, contadores de round e barras de carga especial de ambos os jogadores.
 function _drawHUD() {
   const [f1, f2] = fighters;
-  const barW = 480, barH = 28;
-  const barY = 20;
+  const barW = 480, barH = 28, barY = 20;
 
-  // Barra HP P1 (esquerda)
+  // ── Barra HP P1 (esquerda → direita) ──
   const pct1 = f1.hp / f1.maxHp;
   ctx.fillStyle = '#333';
   ctx.fillRect(20, barY, barW, barH);
-  const col1 = pct1 > 0.5 ? '#4caf50' : pct1 > 0.25 ? '#ff9800' : '#e94560';
-  ctx.fillStyle = col1;
+  ctx.fillStyle = pct1 > 0.5 ? '#4caf50' : pct1 > 0.25 ? '#ff9800' : '#e94560';
   ctx.fillRect(20, barY, barW * pct1, barH);
-  ctx.strokeStyle = '#fff';
-  ctx.lineWidth = 1;
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 1;
   ctx.strokeRect(20, barY, barW, barH);
-
-  ctx.fillStyle = '#fff';
-  ctx.font = 'bold 14px monospace';
-  ctx.textAlign = 'left';
+  ctx.fillStyle = '#fff'; ctx.font = 'bold 14px monospace'; ctx.textAlign = 'left';
   ctx.fillText(`${f1.nome}  ${f1.hp}/${f1.maxHp}`, 24, barY + 20);
 
-  // Barra HP P2 (direita)
+  // ── Barra HP P2 (direita → esquerda) ──
   const pct2 = f2.hp / f2.maxHp;
   ctx.fillStyle = '#333';
   ctx.fillRect(W - 20 - barW, barY, barW, barH);
-  const col2 = pct2 > 0.5 ? '#4caf50' : pct2 > 0.25 ? '#ff9800' : '#e94560';
-  ctx.fillStyle = col2;
+  ctx.fillStyle = pct2 > 0.5 ? '#4caf50' : pct2 > 0.25 ? '#ff9800' : '#e94560';
   ctx.fillRect(W - 20 - barW + barW * (1 - pct2), barY, barW * pct2, barH);
-  ctx.strokeStyle = '#fff';
-  ctx.lineWidth = 1;
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 1;
   ctx.strokeRect(W - 20 - barW, barY, barW, barH);
-
-  ctx.fillStyle = '#fff';
-  ctx.textAlign = 'right';
+  ctx.fillStyle = '#fff'; ctx.textAlign = 'right';
   ctx.fillText(`${f2.hp}/${f2.maxHp}  ${f2.nome}`, W - 24, barY + 20);
 
-  // Rounds
-  ctx.textAlign = 'center';
-  ctx.font = 'bold 18px monospace';
-  ctx.fillStyle = '#e94560';
+  // ── Indicador de round e vitórias ──
+  ctx.textAlign = 'center'; ctx.font = 'bold 18px monospace'; ctx.fillStyle = '#e94560';
   ctx.fillText(`ROUND ${roundAtual}`, W / 2, 30);
-
   for (let i = 0; i < maxRounds; i++) {
     const cx1 = W / 2 - 60 + i * 20;
     const cx2 = W / 2 + 60 - i * 20;
-    ctx.beginPath();
-    ctx.arc(cx1, 46, 7, 0, Math.PI * 2);
-    ctx.fillStyle = vitorias[0] > i ? '#e94560' : '#333';
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(cx2, 46, 7, 0, Math.PI * 2);
-    ctx.fillStyle = vitorias[1] > i ? '#1565c0' : '#333';
-    ctx.fill();
+    ctx.beginPath(); ctx.arc(cx1, 46, 7, 0, Math.PI * 2);
+    ctx.fillStyle = vitorias[0] > i ? '#e94560' : '#333'; ctx.fill();
+    ctx.beginPath(); ctx.arc(cx2, 46, 7, 0, Math.PI * 2);
+    ctx.fillStyle = vitorias[1] > i ? '#1565c0' : '#333'; ctx.fill();
   }
 
-  // Cooldown especial P1
+  // ── Barra de carga especial P1 ──
   if (fighters[0]) {
-    const cd = fighters[0].especialCd || 0;
-    const cdPct = 1 - Math.min(cd / 4000, 1);
+    const pct   = Math.min((fighters[0].especialCharge || 0) / 100, 1);
+    const pronto = pct >= 1;
     ctx.fillStyle = '#333';
     ctx.fillRect(20, barY + barH + 8, 120, 8);
-    ctx.fillStyle = '#ce93d8';
-    ctx.fillRect(20, barY + barH + 8, 120 * cdPct, 8);
-    ctx.fillStyle = '#aaa';
-    ctx.font = '10px monospace';
-    ctx.textAlign = 'left';
-    ctx.fillText('ESPECIAL', 24, barY + barH + 22);
+    ctx.fillStyle = pronto ? '#ffd700' : '#ce93d8';
+    ctx.fillRect(20, barY + barH + 8, 120 * pct, 8);
+    ctx.fillStyle = pronto ? '#ffd700' : '#aaa';
+    ctx.font = '10px monospace'; ctx.textAlign = 'left';
+    ctx.fillText(pronto ? 'ESPECIAL!' : 'ESPECIAL', 24, barY + barH + 22);
   }
 
-  // Cooldown especial P2
+  // ── Barra de carga especial P2 ──
   if (fighters[1]) {
-    const cd = fighters[1].especialCd || 0;
-    const cdPct = 1 - Math.min(cd / 4000, 1);
+    const pct   = Math.min((fighters[1].especialCharge || 0) / 100, 1);
+    const pronto = pct >= 1;
     ctx.fillStyle = '#333';
     ctx.fillRect(W - 140, barY + barH + 8, 120, 8);
-    ctx.fillStyle = '#ce93d8';
-    ctx.fillRect(W - 140, barY + barH + 8, 120 * cdPct, 8);
-    ctx.fillStyle = '#aaa';
-    ctx.font = '10px monospace';
-    ctx.textAlign = 'right';
-    ctx.fillText('ESPECIAL', W - 24, barY + barH + 22);
+    ctx.fillStyle = pronto ? '#ffd700' : '#ce93d8';
+    ctx.fillRect(W - 140, barY + barH + 8, 120 * pct, 8);
+    ctx.fillStyle = pronto ? '#ffd700' : '#aaa';
+    ctx.font = '10px monospace'; ctx.textAlign = 'right';
+    ctx.fillText(pronto ? 'ESPECIAL!' : 'ESPECIAL', W - 24, barY + barH + 22);
   }
 }
 
+// Sobreposição semitransparente com número da contagem (5…1 → "LUTA!").
 function _drawCountdown() {
   ctx.fillStyle = 'rgba(0,0,0,0.5)';
   ctx.fillRect(0, 0, W, H);
@@ -751,69 +867,54 @@ function _drawCountdown() {
   ctx.fillText(countdownVal > 0 ? countdownVal : 'LUTA!', W / 2, H / 2 + 40);
 }
 
+// Overlay "KO!" exibido entre rounds.
 function _drawRoundEnd() {
   const venceuIdx = fighters[0] && fighters[0].morreu ? 1 : 0;
-  const venceu = fighters[venceuIdx];
+  const venceu    = fighters[venceuIdx];
 
   ctx.fillStyle = 'rgba(0,0,0,0.6)';
   ctx.fillRect(0, 0, W, H);
-  ctx.fillStyle = '#ffd700';
-  ctx.font = 'bold 60px monospace';
-  ctx.textAlign = 'center';
+  ctx.fillStyle = '#ffd700'; ctx.font = 'bold 60px monospace'; ctx.textAlign = 'center';
   ctx.fillText('KO!', W / 2, H / 2 - 20);
-  ctx.fillStyle = '#fff';
-  ctx.font = 'bold 28px monospace';
+  ctx.fillStyle = '#fff'; ctx.font = 'bold 28px monospace';
   ctx.fillText(`${venceu ? venceu.nome : 'Jogador'} vence o round!`, W / 2, H / 2 + 30);
 }
 
+// Overlay "GAME OVER" com nome do vencedor. O QR do placar é exibido pelo index.html.
 function _drawGameOver() {
   const venceuIdx = vitorias[0] >= 2 ? 0 : 1;
-  const venceu = fighters[venceuIdx];
+  const venceu    = fighters[venceuIdx];
 
   ctx.fillStyle = 'rgba(0,0,0,0.75)';
   ctx.fillRect(0, 0, W, H);
-  ctx.fillStyle = '#e94560';
-  ctx.font = 'bold 80px monospace';
-  ctx.textAlign = 'center';
+  ctx.fillStyle = '#e94560'; ctx.font = 'bold 80px monospace'; ctx.textAlign = 'center';
   ctx.fillText('GAME OVER', W / 2, H / 2 - 60);
-  ctx.fillStyle = '#ffd700';
-  ctx.font = 'bold 36px monospace';
+  ctx.fillStyle = '#ffd700'; ctx.font = 'bold 36px monospace';
   ctx.fillText(`${venceu ? venceu.nome : 'Jogador'} VENCEU!`, W / 2, H / 2);
 }
 
-function _drawTelaInicial() {
-  ctx.fillStyle = '#e94560';
-  ctx.font = 'bold 90px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText('ARCADE', W / 2, H / 2 - 60);
-  ctx.fillText('FIGHT', W / 2, H / 2 + 20);
+// =============================================================================
+// Tela SELECT — desenho
+// =============================================================================
 
-  ctx.fillStyle = '#aaa';
-  ctx.font = '18px monospace';
-  ctx.fillText('Selecione um modo de jogo abaixo', W / 2, H / 2 + 90);
-}
-
-// ────────────────────────────────────────────────────────────
-// Tela de selecao - DESENHO
-// ────────────────────────────────────────────────────────────
+// Desenha os slots de personagens, cursores dos jogadores, previews de sprites
+// e caixas de informação (stats, especial em foco).
 function _drawSelect() {
-  const defs = PERSONAGENS_DEF;
-  const numPlayers = (salaModo === 'single') ? 1 : 2;
+  const defs       = PERSONAGENS_DEF; // array vindo de sprites.js
+  const numPlayers = salaModo === 'single' ? 1 : 2;
 
-  // Titulo
-  ctx.fillStyle = '#e94560';
-  ctx.font = 'bold 36px monospace';
-  ctx.textAlign = 'center';
+  // Título e subtítulo de instrução
+  ctx.fillStyle = '#e94560'; ctx.font = 'bold 36px monospace'; ctx.textAlign = 'center';
   ctx.fillText('ESCOLHA SEU PERSONAGEM', W / 2, 60);
+  ctx.fillStyle = '#888'; ctx.font = '14px monospace';
+  ctx.fillText(
+    numPlayers === 2
+      ? 'P1: A/D mover | W/Espaço confirmar      P2: ◄/► mover | Seta Cima confirmar'
+      : 'Use A/D para mover  |  W ou Espaço para confirmar',
+    W / 2, 88
+  );
 
-  ctx.fillStyle = '#888';
-  ctx.font = '14px monospace';
-  const subt = numPlayers === 2
-    ? 'P1: A/D mover | W/Espaço confirmar      P2: ◄/► mover | Seta Cima confirmar'
-    : 'Use A/D para mover  |  W ou Espaço para confirmar';
-  ctx.fillText(subt, W / 2, 88);
-
-  // Slots dos personagens
+  // Layout dos slots
   const slotW = 180, slotH = 240, gap = 20;
   const totalW = defs.length * slotW + (defs.length - 1) * gap;
   const startX = (W - totalW) / 2;
@@ -827,86 +928,67 @@ function _drawSelect() {
     const isCursorP2 = numPlayers === 2 && selecao.cursor[1] === i && selecao.escolhido[1] === null;
     const escolhidoP1 = selecao.escolhido[0] === i;
     const escolhidoP2 = selecao.escolhido[1] === i;
-    const bloqueado = (escolhidoP1 || escolhidoP2);
+    const bloqueado   = escolhidoP1 || escolhidoP2;
 
-    if (escolhidoP1 || escolhidoP2) {
-      ctx.fillStyle = '#0a2530';
-    } else if (isCursorP1 && isCursorP2) {
-      ctx.fillStyle = '#3a1a3a';
-    } else if (isCursorP1) {
-      ctx.fillStyle = '#2a1020';
-    } else if (isCursorP2) {
-      ctx.fillStyle = '#10202a';
-    } else {
-      ctx.fillStyle = '#15151f';
-    }
+    // Fundo do slot com cor conforme estado
+    if      (bloqueado)              ctx.fillStyle = '#0a2530';
+    else if (isCursorP1 && isCursorP2) ctx.fillStyle = '#3a1a3a';
+    else if (isCursorP1)             ctx.fillStyle = '#2a1020';
+    else if (isCursorP2)             ctx.fillStyle = '#10202a';
+    else                             ctx.fillStyle = '#15151f';
     _roundRect(ctx, x, y, slotW, slotH, 14);
     ctx.fill();
 
+    // Borda sólida para personagem já escolhido
     if (escolhidoP1) {
-      ctx.strokeStyle = '#e94560';
-      ctx.lineWidth = 4;
-      _roundRect(ctx, x, y, slotW, slotH, 14);
-      ctx.stroke();
+      ctx.strokeStyle = '#e94560'; ctx.lineWidth = 4;
+      _roundRect(ctx, x, y, slotW, slotH, 14); ctx.stroke();
     } else if (escolhidoP2) {
-      ctx.strokeStyle = '#1565c0';
-      ctx.lineWidth = 4;
-      _roundRect(ctx, x, y, slotW, slotH, 14);
-      ctx.stroke();
+      ctx.strokeStyle = '#1565c0'; ctx.lineWidth = 4;
+      _roundRect(ctx, x, y, slotW, slotH, 14); ctx.stroke();
     }
+
+    // Borda tracejada animada para cursor (antes de confirmar)
     if (isCursorP1 && !escolhidoP1) {
-      ctx.strokeStyle = '#e94560';
-      ctx.lineWidth = 3;
-      const dash = (Math.floor(Date.now() / 200) % 2) ? [6, 4] : [4, 6];
-      ctx.setLineDash(dash);
-      _roundRect(ctx, x - 2, y - 2, slotW + 4, slotH + 4, 16);
-      ctx.stroke();
+      ctx.strokeStyle = '#e94560'; ctx.lineWidth = 3;
+      ctx.setLineDash((Math.floor(Date.now() / 200) % 2) ? [6, 4] : [4, 6]);
+      _roundRect(ctx, x - 2, y - 2, slotW + 4, slotH + 4, 16); ctx.stroke();
       ctx.setLineDash([]);
     }
     if (isCursorP2 && !escolhidoP2) {
-      ctx.strokeStyle = '#1565c0';
-      ctx.lineWidth = 3;
-      const dash = (Math.floor(Date.now() / 200) % 2) ? [6, 4] : [4, 6];
-      ctx.setLineDash(dash);
-      _roundRect(ctx, x - 6, y - 6, slotW + 12, slotH + 12, 18);
-      ctx.stroke();
+      ctx.strokeStyle = '#1565c0'; ctx.lineWidth = 3;
+      ctx.setLineDash((Math.floor(Date.now() / 200) % 2) ? [6, 4] : [4, 6]);
+      _roundRect(ctx, x - 6, y - 6, slotW + 12, slotH + 12, 18); ctx.stroke();
       ctx.setLineDash([]);
     }
 
-    // Preview do sprite
+    // Preview do sprite idle — spriteManager.drawPreview usa sprites/{personagem}/idle/0.png
     const previewSize = slotH - 80;
-    if (spriteManager && spriteManager.loaded && spriteManager.drawPreview) {
+    if (spriteManager && spriteManager.loaded) {
       spriteManager.drawPreview(ctx, def.id,
-        x + (slotW - previewSize * 0.7) / 2,
-        y + 20,
-        previewSize * 0.7,
-        previewSize);
+        x + (slotW - previewSize * 0.7) / 2, y + 20,
+        previewSize * 0.7, previewSize);
     } else {
       ctx.fillStyle = def.cor;
       ctx.fillRect(x + 30, y + 30, slotW - 60, previewSize - 30);
     }
 
+    // Overlay escuro com "P1/P2 ESCOLHEU" sobre personagens já confirmados
     if (bloqueado) {
       ctx.fillStyle = 'rgba(0,0,0,0.55)';
-      _roundRect(ctx, x, y, slotW, slotH, 14);
-      ctx.fill();
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 16px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText(escolhidoP1 ? 'P1 ESCOLHEU' : 'P2 ESCOLHEU',
-        x + slotW / 2, y + slotH / 2);
+      _roundRect(ctx, x, y, slotW, slotH, 14); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.font = 'bold 16px monospace'; ctx.textAlign = 'center';
+      ctx.fillText(escolhidoP1 ? 'P1 ESCOLHEU' : 'P2 ESCOLHEU', x + slotW / 2, y + slotH / 2);
     }
 
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 16px monospace';
-    ctx.textAlign = 'center';
+    // Nome e stats do personagem (dados de PERSONAGENS_DEF / sprites.js)
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 16px monospace'; ctx.textAlign = 'center';
     ctx.fillText(def.nome, x + slotW / 2, y + slotH - 36);
-
-    ctx.fillStyle = '#aaa';
-    ctx.font = '11px monospace';
+    ctx.fillStyle = '#aaa'; ctx.font = '11px monospace';
     ctx.fillText(`HP ${def.hp}  VEL ${def.velocidade}`, x + slotW / 2, y + slotH - 18);
   });
 
+  // Caixas de info: P1 e P2 (ou CPU) com nick, personagem em foco e stats
   _drawSelectInfoBox(0, 30, 420);
   if (numPlayers === 2) {
     _drawSelectInfoBox(1, W - 280 - 30, 420);
@@ -914,115 +996,88 @@ function _drawSelect() {
     _drawCPUInfoBox(W - 280 - 30, 420);
   }
 
+  // Caixa de especial do personagem em foco pelo P1
   _drawSelectEspecialFocus();
 }
 
+// Caixa de informações de um jogador humano (nick, personagem em foco, stats).
+// player: 0 = P1, 1 = P2
 function _drawSelectInfoBox(player, x, y) {
-  const w = 280, h = 130;
+  const w   = 280, h = 130;
   const cor = player === 0 ? '#e94560' : '#1565c0';
   const nick = player === 0 ? nickP1 : nickP2;
-  const cursorIdx = selecao.cursor[player];
-  const escolhido = selecao.escolhido[player];
-  const personagemFoco = (escolhido !== null) ? escolhido : cursorIdx;
-  const def = PERSONAGENS_DEF[personagemFoco];
+  const personagemFoco = (selecao.escolhido[player] !== null)
+    ? selecao.escolhido[player]
+    : selecao.cursor[player];
+  const def = PERSONAGENS_DEF[personagemFoco]; // sprites.js
 
   ctx.fillStyle = 'rgba(20,20,30,0.85)';
-  _roundRect(ctx, x, y, w, h, 12);
-  ctx.fill();
-  ctx.strokeStyle = cor;
-  ctx.lineWidth = 2;
-  _roundRect(ctx, x, y, w, h, 12);
-  ctx.stroke();
+  _roundRect(ctx, x, y, w, h, 12); ctx.fill();
+  ctx.strokeStyle = cor; ctx.lineWidth = 2;
+  _roundRect(ctx, x, y, w, h, 12); ctx.stroke();
 
-  ctx.fillStyle = cor;
-  ctx.fillRect(x, y, w, 28);
-  ctx.fillStyle = '#fff';
-  ctx.font = 'bold 14px monospace';
-  ctx.textAlign = 'left';
-  ctx.fillText(`PLAYER ${player + 1}`, x + 12, y + 19);
-  ctx.textAlign = 'right';
-  ctx.fillText(escolhido !== null ? '✓ PRONTO' : 'ESCOLHENDO...', x + w - 12, y + 19);
+  ctx.fillStyle = cor; ctx.fillRect(x, y, w, 28);
+  ctx.fillStyle = '#fff'; ctx.font = 'bold 14px monospace';
+  ctx.textAlign = 'left';  ctx.fillText(`PLAYER ${player + 1}`, x + 12, y + 19);
+  ctx.textAlign = 'right'; ctx.fillText(
+    selecao.escolhido[player] !== null ? '✓ PRONTO' : 'ESCOLHENDO...', x + w - 12, y + 19);
 
-  ctx.fillStyle = '#fff';
-  ctx.font = 'bold 22px monospace';
-  ctx.textAlign = 'center';
+  ctx.fillStyle = '#fff'; ctx.font = 'bold 22px monospace'; ctx.textAlign = 'center';
   ctx.fillText(nick, x + w / 2, y + 60);
-
-  ctx.fillStyle = def.cor;
-  ctx.font = 'bold 18px monospace';
+  ctx.fillStyle = def.cor; ctx.font = 'bold 18px monospace';
   ctx.fillText(def.nome, x + w / 2, y + 88);
-
-  ctx.fillStyle = '#aaa';
-  ctx.font = '11px monospace';
+  ctx.fillStyle = '#aaa'; ctx.font = '11px monospace';
   ctx.fillText(`HP ${def.hp}  |  Velocidade ${def.velocidade}`, x + w / 2, y + 108);
   ctx.fillText(`Dano  ${def.dano.leve} / ${def.dano.forte} / ${def.dano.especial}`, x + w / 2, y + 122);
 }
 
+// Caixa de informações da CPU: mostra dificuldade e personagem sorteado (ou "aguardando").
 function _drawCPUInfoBox(x, y) {
-  const w = 280, h = 130;
+  const w   = 280, h = 130;
   const cor = '#1565c0';
-  const def = (selecao.escolhido[1] !== null)
-    ? PERSONAGENS_DEF[selecao.escolhido[1]]
-    : null;
+  const def = selecao.escolhido[1] !== null ? PERSONAGENS_DEF[selecao.escolhido[1]] : null;
 
   ctx.fillStyle = 'rgba(20,20,30,0.85)';
-  _roundRect(ctx, x, y, w, h, 12);
-  ctx.fill();
-  ctx.strokeStyle = cor;
-  ctx.lineWidth = 2;
-  _roundRect(ctx, x, y, w, h, 12);
-  ctx.stroke();
+  _roundRect(ctx, x, y, w, h, 12); ctx.fill();
+  ctx.strokeStyle = cor; ctx.lineWidth = 2;
+  _roundRect(ctx, x, y, w, h, 12); ctx.stroke();
 
-  ctx.fillStyle = cor;
-  ctx.fillRect(x, y, w, 28);
-  ctx.fillStyle = '#fff';
-  ctx.font = 'bold 14px monospace';
-  ctx.textAlign = 'left';
-  ctx.fillText('CPU', x + 12, y + 19);
-  ctx.textAlign = 'right';
-  ctx.fillText(`DIF: ${dificuldadeIA.toUpperCase()}`, x + w - 12, y + 19);
+  ctx.fillStyle = cor; ctx.fillRect(x, y, w, 28);
+  ctx.fillStyle = '#fff'; ctx.font = 'bold 14px monospace';
+  ctx.textAlign = 'left';  ctx.fillText('CPU', x + 12, y + 19);
+  ctx.textAlign = 'right'; ctx.fillText(`DIF: ${dificuldadeIA.toUpperCase()}`, x + w - 12, y + 19);
 
-  ctx.fillStyle = '#fff';
-  ctx.font = 'bold 22px monospace';
-  ctx.textAlign = 'center';
+  ctx.fillStyle = '#fff'; ctx.font = 'bold 22px monospace'; ctx.textAlign = 'center';
   ctx.fillText('Computador', x + w / 2, y + 62);
 
   if (def) {
-    ctx.fillStyle = def.cor;
-    ctx.font = 'bold 16px monospace';
+    ctx.fillStyle = def.cor; ctx.font = 'bold 16px monospace';
     ctx.fillText(`Vai usar: ${def.nome}`, x + w / 2, y + 92);
   } else {
-    ctx.fillStyle = '#666';
-    ctx.font = '13px monospace';
+    ctx.fillStyle = '#666'; ctx.font = '13px monospace';
     ctx.fillText('Aguardando P1 escolher...', x + w / 2, y + 92);
   }
 }
 
+// Caixa inferior com o nome e descrição do especial do personagem em foco pelo P1.
 function _drawSelectEspecialFocus() {
-  const idx = (selecao.escolhido[0] !== null) ? selecao.escolhido[0] : selecao.cursor[0];
-  const def = PERSONAGENS_DEF[idx];
-
-  const x = W / 2 - 200;
-  const y = 575;
-  const w = 400, h = 60;
+  const idx = selecao.escolhido[0] !== null ? selecao.escolhido[0] : selecao.cursor[0];
+  const def = PERSONAGENS_DEF[idx]; // sprites.js
+  const x = W / 2 - 200, y = 575, w = 400, h = 60;
 
   ctx.fillStyle = 'rgba(206,147,216,0.12)';
-  _roundRect(ctx, x, y, w, h, 10);
-  ctx.fill();
-  ctx.strokeStyle = '#ce93d8';
-  ctx.lineWidth = 1;
-  _roundRect(ctx, x, y, w, h, 10);
-  ctx.stroke();
+  _roundRect(ctx, x, y, w, h, 10); ctx.fill();
+  ctx.strokeStyle = '#ce93d8'; ctx.lineWidth = 1;
+  _roundRect(ctx, x, y, w, h, 10); ctx.stroke();
 
-  ctx.fillStyle = '#ce93d8';
-  ctx.font = 'bold 14px monospace';
-  ctx.textAlign = 'center';
+  ctx.fillStyle = '#ce93d8'; ctx.font = 'bold 14px monospace'; ctx.textAlign = 'center';
   ctx.fillText(`ESPECIAL: ${def.especial}`, W / 2, y + 22);
-  ctx.fillStyle = '#aaa';
-  ctx.font = '12px monospace';
+  ctx.fillStyle = '#aaa'; ctx.font = '12px monospace';
   ctx.fillText(def.descEspecial, W / 2, y + 42);
 }
 
+// Utilitário: desenha um retângulo com cantos arredondados no ctx.
+// Não aplica fill/stroke — o chamador decide o estilo.
 function _roundRect(ctx, x, y, w, h, r) {
   ctx.beginPath();
   ctx.moveTo(x + r, y);
@@ -1037,37 +1092,42 @@ function _roundRect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
-// ────────────────────────────────────────────────────────────
-// Funcoes de fluxo (chamadas pelo index.html)
-// ────────────────────────────────────────────────────────────
+// =============================================================================
+// Funções de fluxo — chamadas pelo index.html via window.Game
+// =============================================================================
+
+// Inicia o fluxo de uma nova partida: guarda dados da sala, reseta seleção,
+// limpa input residual e muda estado para SELECT.
+// Chamado por index.html após QR/offline confirmar os jogadores.
+// modo: 'single' | 'multi'
+// id: sala_id do backend (null em modo offline)
+// tokenP1: JWT do P1 para registrar resultado (null em modo offline)
 function iniciarFluxo(modo, id, tokenP1) {
   salaId    = id;
   salaToken = tokenP1;
   salaModo  = modo;
 
-  // Reset selecao
-  selecao = {
-    cursor: [0, 1],
-    escolhido: [null, null]
-  };
+  selecao = { cursor: [0, 1], escolhido: [null, null] };
 
-  // Limpa teclado e espelha estado real do gamepad em prev para que
-  // justPressed() retorne false para qualquer input mantido pressionado agora
-  Controls.resetInput();
+  // Limpa teclas pressionadas e espelha estado do gamepad em prev
+  // para que justPressed() não dispare para inputs já mantidos
+  Controls.resetInput(); // controls.js
 
-  // Avisa index.html para ocultar todos os elementos de menu
+  // Avisa index.html para ocultar menus e marcar _telaAtual = 'jogando'
   document.dispatchEvent(new CustomEvent('game:selectIniciado'));
 
   gameState = 'SELECT';
 }
 
+// Recebe os nicks dos jogadores vindos do index.html (após autenticação ou modo offline).
+// Os nicks são aplicados nos Fighters em iniciarPartidaComEscolhas().
 function jogadoresEntraramprontos(nicks) {
-  // Recebe nicks do index.html. A partida real comeca no SELECT,
-  // entao so guardamos os nicks para usar quando criar os Fighters.
   nickP1 = nicks[0] || 'P1';
   nickP2 = nicks[1] || (salaModo === 'single' ? 'CPU' : 'P2');
 }
 
+// Recria os Fighters com os mesmos personagens do round 1 e reinicia o countdown.
+// Usado entre rounds (não recria a seleção de personagens).
 function _reiniciarRound() {
   projeteis = [];
   const f1 = new Fighter(0, selecao.escolhido[0], 200);
@@ -1082,31 +1142,23 @@ function _reiniciarRound() {
   gameState      = 'COUNTDOWN';
 }
 
+// Marca GAME_OVER, notifica index.html para exibir o QR do placar e
+// registra o resultado no backend via Api.registrarResultado().
+// ► CHAMADA DE API: POST /partida/resultado (api.js → backend/main.py)
 async function _encerrarPartida() {
   gameState = 'GAME_OVER';
 
-  // Avisa o index.html (vai mostrar QR do placar apos 2.5s)
+  // index.html ouve este evento e exibe o QR do placar após 2.5s
   document.dispatchEvent(new CustomEvent('game:gameOver'));
 
+  // Sem sala/token = modo offline; resultado não é enviado
   if (!salaId || !salaToken) return;
 
-  const venceuIdx  = vitorias[0] >= vitorias[1] ? 0 : 1;
-  const pontos_j1  = fighters[0] ? fighters[0].pontos : 0;
-  const pontos_j2  = fighters[1] ? fighters[1].pontos : 0;
+  const pontos_j1 = fighters[0] ? fighters[0].pontos : 0;
+  const pontos_j2 = fighters[1] ? fighters[1].pontos : 0;
 
-  // Em single: sempre usa salaToken (P1)
-  // Em multi: idealmente teria 2 tokens, mas o index passa so o de P1.
-  // Por simplicidade, usa salaToken. Pode ser melhorado depois.
-  const tokenVencedor = salaToken;
-
-  if (!tokenVencedor) {
-    console.warn('[Game] Sem token de vencedor para registrar resultado');
-    return;
-  }
-
-  const resultado = await Api.registrarResultado(
-    salaId, tokenVencedor, pontos_j1, pontos_j2
-  );
+  // api.js → POST /partida/resultado no backend FastAPI
+  const resultado = await Api.registrarResultado(salaId, salaToken, pontos_j1, pontos_j2);
 
   if (!resultado.ok) {
     console.warn('[Game] Erro ao registrar resultado:', resultado.erro);
@@ -1115,31 +1167,35 @@ async function _encerrarPartida() {
   }
 }
 
+// Reseta todo o estado de partida e retorna ao menu principal.
+// Chamado por Game.voltarInicio() (exposto ao index.html) e pelo listener 'game:telaInicial'.
 function _voltarInicio() {
-  salaId = null;
-  salaToken = null;
-  salaTokenP2 = null;
-  fighters = [];
-  projeteis = [];
-  vitorias = [0, 0];
+  salaId     = null;
+  salaToken  = null;
+  fighters   = [];
+  projeteis  = [];
+  vitorias   = [0, 0];
   roundAtual = 1;
-  gameState = 'TELA_INICIAL';
+  gameState  = 'TELA_INICIAL';
 }
 
+// Define a dificuldade da IA. Chamado por index.html antes de iniciarFluxo.
 function setDificuldade(d) { dificuldadeIA = d; }
 
-// Listener: o index.html avisa quando deve voltar ao menu (apos QR do placar)
+// Ouve 'game:telaInicial' disparado pelo index.html (botão "Voltar ao Menu" no QR do placar).
+// Só retorna ao início se o jogo estiver em GAME_OVER para não interromper partidas.
 document.addEventListener('game:telaInicial', () => {
-  if (gameState === 'GAME_OVER') {
-    _voltarInicio();
-  }
+  if (gameState === 'GAME_OVER') _voltarInicio();
 });
 
-// Expoe para o index.html
+// =============================================================================
+// API pública exposta ao index.html via window.Game
+// =============================================================================
 window.Game = {
-  init,
-  iniciarFluxo,
-  jogadoresEntraramprontos,
-  setDificuldade,
-  getState: () => gameState
+  init,                           // inicializa canvas, carrega sprites, inicia loop
+  iniciarFluxo,                   // inicia fluxo de nova partida (SELECT)
+  jogadoresEntraramprontos,       // define nicks dos jogadores
+  setDificuldade,                 // define dificuldade da IA ('facil'|'medio'|'dificil')
+  getState:     () => gameState,  // retorna o estado atual (usado por index.html para L2/R2)
+  voltarInicio: _voltarInicio     // força retorno ao menu (usado por index.html via L2/R2)
 };
