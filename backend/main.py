@@ -85,7 +85,7 @@ app.add_middleware(
 # login.html e placar.html ficam em backend/site/ e são acessados pelo celular via QR.
 SITE_DIR = os.path.join(os.path.dirname(__file__), "site")
 if os.path.exists(SITE_DIR):
-    app.mount("/site", StaticFiles(directory="site"), name="site")
+    app.mount("/site", StaticFiles(directory=SITE_DIR), name="site")
 
 # Cria as tabelas do banco se ainda não existirem (idempotente).
 db.init_db()
