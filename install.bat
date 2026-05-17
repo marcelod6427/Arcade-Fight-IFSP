@@ -19,6 +19,9 @@ if %errorLevel% neq 0 (
 set "ROOT=%~dp0"
 cd /d "%ROOT%"
 
+:: Log de debug para confirmar que o script chegou ate aqui
+echo %ROOT% > "%TEMP%\arcade_debug.txt"
+
 echo.
 echo  ================================================
 echo           ARCADE FIGHT  ^|  INSTALADOR
@@ -52,7 +55,8 @@ if not defined PYTHON_EXE (
     if not exist "%TEMP%\python-3.12.10-amd64.exe" (
         echo.
         echo  [ERRO] Falha ao baixar o Python. Verifique sua conexao com a internet.
-        pause & exit /b 1
+        pause
+        exit /b 1
     )
     echo  Instalando Python 3.12.10... (pode demorar alguns minutos)
     "%TEMP%\python-3.12.10-amd64.exe" /quiet InstallAllUsers=1 PrependPath=1 Include_pip=1
@@ -60,10 +64,16 @@ if not defined PYTHON_EXE (
         echo.
         echo  [ERRO] Falha ao instalar o Python.
         del /f /q "%TEMP%\python-3.12.10-amd64.exe" >nul 2>&1
-        pause & exit /b 1
+        pause
+        exit /b 1
     )
     del /f /q "%TEMP%\python-3.12.10-amd64.exe" >nul 2>&1
     set "PYTHON_EXE=C:\Program Files\Python312\python.exe"
+
+    :: Recarrega o PATH do sistema apos instalar o Python
+    for /f "usebackq delims=" %%i in (`powershell -NoProfile -Command "[System.Environment]::GetEnvironmentVariable('Path','Machine')"`) do set "SYS_PATH=%%i"
+    set "PATH=!SYS_PATH!;%PATH%"
+
     echo  Python 3.12.10 instalado com sucesso!
 ) else (
     echo  Python 3.12 ja instalado. OK
@@ -86,7 +96,8 @@ if "%NODE_OK%"=="0" (
     if not exist "%TEMP%\node-v22.15.0-x64.msi" (
         echo.
         echo  [ERRO] Falha ao baixar o Node.js. Verifique sua conexao com a internet.
-        pause & exit /b 1
+        pause
+        exit /b 1
     )
     echo  Instalando Node.js 22.15.0 LTS... (pode demorar alguns minutos)
     msiexec /i "%TEMP%\node-v22.15.0-x64.msi" /quiet /norestart
@@ -95,9 +106,14 @@ if "%NODE_OK%"=="0" (
     if !MSI_ERR! neq 0 if !MSI_ERR! neq 3010 (
         echo.
         echo  [ERRO] Falha ao instalar o Node.js. Codigo de erro: !MSI_ERR!
-        pause & exit /b 1
+        pause
+        exit /b 1
     )
-    set "PATH=C:\Program Files\nodejs;!PATH!"
+
+    :: Recarrega o PATH do sistema apos instalar o Node.js
+    for /f "usebackq delims=" %%i in (`powershell -NoProfile -Command "[System.Environment]::GetEnvironmentVariable('Path','Machine')"`) do set "SYS_PATH=%%i"
+    set "PATH=!SYS_PATH!;%PATH%"
+
     echo  Node.js 22.15.0 LTS instalado com sucesso!
 ) else (
     echo  Node.js ja instalado. OK
@@ -105,7 +121,7 @@ if "%NODE_OK%"=="0" (
 
 :: Garante que o caminho padrao do Node esteja no PATH desta sessao CMD
 if exist "C:\Program Files\nodejs" (
-    set "PATH=C:\Program Files\nodejs;%PATH%"
+    set "PATH=C:\Program Files\nodejs;!PATH!"
 )
 
 :: ======================================================================
@@ -123,7 +139,8 @@ if exist "venv" (
         echo.
         echo  [ERRO] Nao foi possivel remover backend\venv.
         echo  Feche todos os programas que usem arquivos dessa pasta e tente novamente.
-        pause & exit /b 1
+        pause
+        exit /b 1
     )
     echo  venv antiga removida.
 )
@@ -134,7 +151,8 @@ if errorlevel 1 (
     echo.
     echo  [ERRO] Falha ao criar o ambiente virtual.
     echo  Causa provavel: antivirus bloqueando ou falta de permissao na pasta.
-    pause & exit /b 1
+    pause
+    exit /b 1
 )
 echo  Ambiente virtual criado!
 
@@ -155,7 +173,8 @@ if errorlevel 1 (
     echo.
     echo  [ERRO] Falha ao instalar dependencias do backend.
     echo  Verifique o arquivo backend\requirements.txt e tente novamente.
-    pause & exit /b 1
+    pause
+    exit /b 1
 )
 echo  Dependencias do backend instaladas!
 
@@ -171,7 +190,8 @@ if errorlevel 1 (
     echo.
     echo  [ERRO] Falha ao instalar dependencias do jogo (npm install).
     echo  Verifique sua conexao com a internet e tente novamente.
-    pause & exit /b 1
+    pause
+    exit /b 1
 )
 echo  Dependencias do jogo instaladas!
 
@@ -219,8 +239,10 @@ echo  Como iniciar o jogo:
 echo    - Atalho "Arcade Fight" na Area de Trabalho
 echo    - Ou execute: start.bat
 echo.
-set /p "INICIAR=  Deseja iniciar o jogo agora? (S/N): "
-if /i "!INICIAR!"=="S" (
+
+set "INICIAR=N"
+set /p INICIAR=  Deseja iniciar o jogo agora? (S/N):
+if /i "%INICIAR%"=="S" (
     cd /d "%ROOT%"
     call start.bat
 )
