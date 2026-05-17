@@ -19,9 +19,6 @@ if %errorLevel% neq 0 (
 set "ROOT=%~dp0"
 cd /d "%ROOT%"
 
-:: Log de debug para confirmar que o script chegou ate aqui
-echo %ROOT% > "%TEMP%\arcade_debug.txt"
-
 echo.
 echo  ================================================
 echo           ARCADE FIGHT  ^|  INSTALADOR
@@ -34,47 +31,49 @@ echo.
 echo  [1/6] Verificando Python 3.12...
 
 set "PYTHON_EXE="
-if exist "C:\Program Files\Python312\python.exe" set "PYTHON_EXE=C:\Program Files\Python312\python.exe"
-if not defined PYTHON_EXE (
-    if exist "%LOCALAPPDATA%\Programs\Python\Python312\python.exe" (
-        set "PYTHON_EXE=%LOCALAPPDATA%\Programs\Python\Python312\python.exe"
-    )
-)
-if not defined PYTHON_EXE (
-    powershell -NoProfile -Command "$p = (Get-Command python -ErrorAction SilentlyContinue).Source; if($p -and $p -match 'Python312'){Write-Output $p}" > "%TEMP%\pypath.txt" 2>nul
-    set /p PYTHON_EXE=<"%TEMP%\pypath.txt"
-    del /f /q "%TEMP%\pypath.txt" >nul 2>&1
-)
 
-if not defined PYTHON_EXE (
-    echo  Python 3.12 nao encontrado. Baixando instalador (~27 MB)...
-    powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12;(New-Object Net.WebClient).DownloadFile('https://www.python.org/ftp/python/3.12.10/python-3.12.10-amd64.exe','%TEMP%\python-3.12.10-amd64.exe')"
-    if not exist "%TEMP%\python-3.12.10-amd64.exe" (
-        echo.
-        echo  [ERRO] Falha ao baixar o Python. Verifique sua conexao com a internet.
-        pause
-        exit /b 1
-    )
-    echo  Instalando Python 3.12.10... (pode demorar alguns minutos)
-    "%TEMP%\python-3.12.10-amd64.exe" /quiet InstallAllUsers=1 PrependPath=1 Include_pip=1
-    if errorlevel 1 (
-        echo.
-        echo  [ERRO] Falha ao instalar o Python.
-        del /f /q "%TEMP%\python-3.12.10-amd64.exe" >nul 2>&1
-        pause
-        exit /b 1
-    )
-    del /f /q "%TEMP%\python-3.12.10-amd64.exe" >nul 2>&1
+if exist "C:\Program Files\Python312\python.exe" (
     set "PYTHON_EXE=C:\Program Files\Python312\python.exe"
-
-    :: Recarrega o PATH do sistema apos instalar o Python
-    for /f "usebackq delims=" %%i in (`powershell -NoProfile -Command "[System.Environment]::GetEnvironmentVariable('Path','Machine')"`) do set "SYS_PATH=%%i"
-    set "PATH=!SYS_PATH!;%PATH%"
-
-    echo  Python 3.12.10 instalado com sucesso!
-) else (
-    echo  Python 3.12 ja instalado. OK
+    goto :python_ok
 )
+
+if exist "%LOCALAPPDATA%\Programs\Python\Python312\python.exe" (
+    set "PYTHON_EXE=%LOCALAPPDATA%\Programs\Python\Python312\python.exe"
+    goto :python_ok
+)
+
+:: Busca pelo Python via PowerShell de forma segura
+powershell -NoProfile -Command "$p=(Get-Command python -EA SilentlyContinue).Source; if($p -match 'Python312'){$p} else {''}" >"%TEMP%\pypath.txt" 2>nul
+set /p PYTHON_FOUND=<"%TEMP%\pypath.txt"
+del /f /q "%TEMP%\pypath.txt" >nul 2>&1
+
+if defined PYTHON_FOUND (
+    if not "!PYTHON_FOUND!"=="" (
+        set "PYTHON_EXE=!PYTHON_FOUND!"
+        goto :python_ok
+    )
+)
+
+:: Python nao encontrado - baixar e instalar
+echo  Python 3.12 nao encontrado. Baixando instalador (~27 MB)...
+powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12;(New-Object Net.WebClient).DownloadFile('https://www.python.org/ftp/python/3.12.10/python-3.12.10-amd64.exe','%TEMP%\python312.exe')"
+
+if not exist "%TEMP%\python312.exe" (
+    echo.
+    echo  [ERRO] Falha ao baixar o Python. Verifique sua conexao com a internet.
+    echo.
+    pause
+    exit /b 1
+)
+
+echo  Instalando Python 3.12.10...
+"%TEMP%\python312.exe" /quiet InstallAllUsers=1 PrependPath=1 Include_pip=1
+del /f /q "%TEMP%\python312.exe" >nul 2>&1
+set "PYTHON_EXE=C:\Program Files\Python312\python.exe"
+echo  Python 3.12.10 instalado com sucesso!
+
+:python_ok
+echo  Python encontrado: !PYTHON_EXE!
 
 :: ======================================================================
 :: [2/6] Node.js 22.15.0 LTS
@@ -83,43 +82,36 @@ echo.
 echo  [2/6] Verificando Node.js...
 
 set "NODE_OK=0"
-where node >nul 2>&1
-if not errorlevel 1 set "NODE_OK=1"
 if exist "C:\Program Files\nodejs\node.exe" set "NODE_OK=1"
 
-if "%NODE_OK%"=="0" (
-    echo  Node.js nao encontrado. Baixando instalador (~30 MB)...
-    powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12;(New-Object Net.WebClient).DownloadFile('https://nodejs.org/dist/v22.15.0/node-v22.15.0-x64.msi','%TEMP%\node-v22.15.0-x64.msi')"
-    if not exist "%TEMP%\node-v22.15.0-x64.msi" (
-        echo.
-        echo  [ERRO] Falha ao baixar o Node.js. Verifique sua conexao com a internet.
-        pause
-        exit /b 1
-    )
-    echo  Instalando Node.js 22.15.0 LTS... (pode demorar alguns minutos)
-    msiexec /i "%TEMP%\node-v22.15.0-x64.msi" /quiet /norestart
-    set "MSI_ERR=!errorlevel!"
-    del /f /q "%TEMP%\node-v22.15.0-x64.msi" >nul 2>&1
-    if !MSI_ERR! neq 0 if !MSI_ERR! neq 3010 (
-        echo.
-        echo  [ERRO] Falha ao instalar o Node.js. Codigo de erro: !MSI_ERR!
-        pause
-        exit /b 1
-    )
-
-    :: Recarrega o PATH do sistema apos instalar o Node.js
-    for /f "usebackq delims=" %%i in (`powershell -NoProfile -Command "[System.Environment]::GetEnvironmentVariable('Path','Machine')"`) do set "SYS_PATH=%%i"
-    set "PATH=!SYS_PATH!;%PATH%"
-
-    echo  Node.js 22.15.0 LTS instalado com sucesso!
-) else (
-    echo  Node.js ja instalado. OK
+if "!NODE_OK!"=="0" (
+    where node >nul 2>&1
+    if not errorlevel 1 set "NODE_OK=1"
 )
 
-:: Garante que o caminho padrao do Node esteja no PATH desta sessao CMD
+if "!NODE_OK!"=="0" (
+    echo  Node.js nao encontrado. Baixando instalador (~30 MB)...
+    powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12;(New-Object Net.WebClient).DownloadFile('https://nodejs.org/dist/v22.15.0/node-v22.15.0-x64.msi','%TEMP%\nodejs.msi')"
+
+    if not exist "%TEMP%\nodejs.msi" (
+        echo.
+        echo  [ERRO] Falha ao baixar o Node.js. Verifique sua conexao com a internet.
+        echo.
+        pause
+        exit /b 1
+    )
+
+    echo  Instalando Node.js 22.15.0 LTS...
+    msiexec /i "%TEMP%\nodejs.msi" /quiet /norestart
+    del /f /q "%TEMP%\nodejs.msi" >nul 2>&1
+    echo  Node.js instalado com sucesso!
+)
+
 if exist "C:\Program Files\nodejs" (
     set "PATH=C:\Program Files\nodejs;!PATH!"
 )
+
+echo  Node.js: OK
 
 :: ======================================================================
 :: [3/6] Ambiente virtual Python (venv)
@@ -130,24 +122,25 @@ echo  [3/6] Configurando ambiente virtual Python...
 cd /d "%ROOT%backend"
 
 if exist "venv" (
-    echo  Removendo venv existente (pode ter caminhos invalidos de outro dispositivo)...
+    echo  Removendo venv existente...
     rmdir /S /Q "venv"
     if exist "venv" (
         echo.
         echo  [ERRO] Nao foi possivel remover backend\venv.
-        echo  Feche todos os programas que usem arquivos dessa pasta e tente novamente.
+        echo  Feche todos os programas que usem essa pasta e tente novamente.
+        echo.
         pause
         exit /b 1
     )
     echo  venv antiga removida.
 )
 
-echo  Criando novo ambiente virtual com Python 3.12...
-"%PYTHON_EXE%" -m venv venv
+echo  Criando novo ambiente virtual...
+"!PYTHON_EXE!" -m venv venv
 if errorlevel 1 (
     echo.
     echo  [ERRO] Falha ao criar o ambiente virtual.
-    echo  Causa provavel: antivirus bloqueando ou falta de permissao na pasta.
+    echo.
     pause
     exit /b 1
 )
@@ -157,36 +150,36 @@ echo  Ambiente virtual criado!
 :: [4/6] Dependencias do backend (Python)
 :: ======================================================================
 echo.
-echo  [4/6] Instalando dependencias do backend (Python)...
+echo  [4/6] Instalando dependencias do backend...
 
 set "VENV_PY=%ROOT%backend\venv\Scripts\python.exe"
 
-echo  Atualizando pip, setuptools e wheel...
-"%VENV_PY%" -m pip install --upgrade pip setuptools wheel --quiet
+echo  Atualizando pip...
+"!VENV_PY!" -m pip install --upgrade pip setuptools wheel --quiet
 
-echo  Instalando pacotes do requirements.txt...
-"%VENV_PY%" -m pip install -r requirements.txt
+echo  Instalando requirements.txt...
+"!VENV_PY!" -m pip install -r requirements.txt
 if errorlevel 1 (
     echo.
     echo  [ERRO] Falha ao instalar dependencias do backend.
-    echo  Verifique o arquivo backend\requirements.txt e tente novamente.
+    echo.
     pause
     exit /b 1
 )
 echo  Dependencias do backend instaladas!
 
 :: ======================================================================
-:: [5/6] Dependencias do jogo (npm / Electron)
+:: [5/6] Dependencias do jogo (npm)
 :: ======================================================================
 echo.
-echo  [5/6] Instalando dependencias do jogo (Electron/Node.js)...
+echo  [5/6] Instalando dependencias do jogo (Electron)...
 
 cd /d "%ROOT%game"
 call npm install --no-fund --no-audit
 if errorlevel 1 (
     echo.
-    echo  [ERRO] Falha ao instalar dependencias do jogo (npm install).
-    echo  Verifique sua conexao com a internet e tente novamente.
+    echo  [ERRO] Falha ao instalar dependencias do jogo.
+    echo.
     pause
     exit /b 1
 )
@@ -199,29 +192,17 @@ echo.
 echo  [6/6] Verificando atalho na Area de Trabalho...
 
 set "LNK=%USERPROFILE%\Desktop\Arcade Fight.lnk"
-set "START_BAT=%ROOT%start.bat"
-set "PS_SCRIPT=%TEMP%\arcade_atalho.ps1"
 
 if not exist "%LNK%" (
-    echo  Criando atalho "Arcade Fight" na Area de Trabalho...
-    echo $ws = New-Object -ComObject WScript.Shell > "%PS_SCRIPT%"
-    echo $lnk = $env:USERPROFILE + '\Desktop\Arcade Fight.lnk' >> "%PS_SCRIPT%"
-    echo $s = $ws.CreateShortcut($lnk) >> "%PS_SCRIPT%"
-    echo $s.TargetPath = '%START_BAT%' >> "%PS_SCRIPT%"
-    echo $s.WorkingDirectory = '%ROOT%' >> "%PS_SCRIPT%"
-    echo $s.Description = 'Iniciar Arcade Fight' >> "%PS_SCRIPT%"
-    echo $s.WindowStyle = 1 >> "%PS_SCRIPT%"
-    echo $s.Save() >> "%PS_SCRIPT%"
-    powershell -NoProfile -ExecutionPolicy Bypass -File "%PS_SCRIPT%"
-    del /f /q "%PS_SCRIPT%" >nul 2>&1
+    echo  Criando atalho na Area de Trabalho...
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "$ws=New-Object -ComObject WScript.Shell;$s=$ws.CreateShortcut('%USERPROFILE%\Desktop\Arcade Fight.lnk');$s.TargetPath='%ROOT%start.bat';$s.WorkingDirectory='%ROOT%';$s.Description='Iniciar Arcade Fight';$s.Save()"
     if exist "%LNK%" (
         echo  Atalho criado com sucesso!
     ) else (
-        echo  [AVISO] Nao foi possivel criar o atalho automaticamente.
-        echo  Para iniciar o jogo, use o arquivo start.bat diretamente.
+        echo  [AVISO] Nao foi possivel criar o atalho. Use o start.bat diretamente.
     )
 ) else (
-    echo  Atalho ja existe na Area de Trabalho. OK
+    echo  Atalho ja existe. OK
 )
 
 :: ======================================================================
@@ -229,17 +210,15 @@ if not exist "%LNK%" (
 :: ======================================================================
 echo.
 echo  ================================================
-echo         INSTALACAO CONCLUIDA COM SUCESSO!
+echo        INSTALACAO CONCLUIDA COM SUCESSO!
 echo  ================================================
 echo.
-echo  Como iniciar o jogo:
+echo  Para iniciar o jogo use:
 echo    - Atalho "Arcade Fight" na Area de Trabalho
 echo    - Ou execute: start.bat
 echo.
-
-set "INICIAR=N"
-set /p INICIAR=  Deseja iniciar o jogo agora? (S/N):
-if /i "%INICIAR%"=="S" (
+set /p "INICIAR=  Deseja iniciar o jogo agora? (S/N): "
+if /i "!INICIAR!"=="S" (
     cd /d "%ROOT%"
     call start.bat
 )
