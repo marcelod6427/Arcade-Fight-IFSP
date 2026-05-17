@@ -13,9 +13,9 @@
 //   mas essas são usadas pelo site mobile (site/login.html, site/placar.html),
 //   não pelo jogo Electron — portanto não estão aqui.
 //
-// URL base:
-//   Produção  → variável de ambiente RENDER_URL (definida no Electron antes de iniciar)
-//   Dev local → http://localhost:8000 (FastAPI rodando localmente)
+// URL base (resolvida em tempo de execução por verificarConexao()):
+//   Online  → https://arcade-fight-ifsp.onrender.com (servidor Render acessível)
+//   Offline → http://localhost:8000 (FastAPI rodando localmente)
 //
 // Todas as funções retornam um objeto com { ok: true, ...dados }
 // ou { ok: false, erro: 'mensagem' } em caso de falha.
@@ -24,12 +24,13 @@
 //   window.Api — objeto singleton consumido por game.js e index.html
 // =============================================================================
 
-// Determina a URL base do backend.
-// Em Electron com nodeIntegration=true, process.env está disponível.
-// Se RENDER_URL estiver definida (deploy em produção), usa ela; senão, localhost.
-const API_BASE = (typeof process !== 'undefined' && process.env.RENDER_URL)
-  ? process.env.RENDER_URL.replace(/\/$/, '') // remove barra final se houver
-  : 'http://localhost:8000';
+// URLs possíveis do backend.
+const ONLINE_URL  = 'https://arcade-fight-ifsp.onrender.com';
+const OFFLINE_URL = 'http://localhost:8000';
+
+// Começa apontando para o servidor online; verificarConexao() corrige para
+// OFFLINE_URL se o servidor não responder dentro do timeout de 3s.
+let API_BASE = ONLINE_URL;
 
 // =============================================================================
 // Api — métodos públicos usados pelo jogo
@@ -90,20 +91,24 @@ const Api = {
 
   // ── Conectividade ──────────────────────────────────────────────────────────
 
-  // Verifica se o backend está acessível antes de iniciar o jogo.
-  // Timeout de 3s — se não responder, o jogo entra em modo offline.
+  // Verifica se o servidor online está acessível antes de iniciar o jogo.
+  // Timeout de 3s — se não responder, cai para localhost (modo offline).
+  // Como efeito colateral, ajusta API_BASE para a URL correta antes de Game.init().
   // Chamado por index.html no DOMContentLoaded, antes de Game.init().
   // ► GET / → backend/main.py: root() — retorna { status: "ok" }
   async verificarConexao() {
     try {
       const controller = new AbortController();
       const tid = setTimeout(() => controller.abort(), 3000);
-      const res = await fetch(API_BASE + '/', { signal: controller.signal });
+      const res = await fetch(ONLINE_URL + '/', { signal: controller.signal });
       clearTimeout(tid);
-      return res.ok;
-    } catch {
-      return false; // qualquer erro (rede, timeout, CORS) = offline
-    }
+      if (res.ok) {
+        API_BASE = ONLINE_URL;
+        return true;
+      }
+    } catch { /* timeout ou sem rede */ }
+    API_BASE = OFFLINE_URL;
+    return false;
   }
 };
 
