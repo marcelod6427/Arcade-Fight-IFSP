@@ -34,19 +34,16 @@ echo.
 echo  [1/6] Verificando Python 3.12...
 
 set "PYTHON_EXE="
-
-if exist "C:\Program Files\Python312\python.exe" (
-    set "PYTHON_EXE=C:\Program Files\Python312\python.exe"
-)
+if exist "C:\Program Files\Python312\python.exe" set "PYTHON_EXE=C:\Program Files\Python312\python.exe"
 if not defined PYTHON_EXE (
     if exist "%LOCALAPPDATA%\Programs\Python\Python312\python.exe" (
         set "PYTHON_EXE=%LOCALAPPDATA%\Programs\Python\Python312\python.exe"
     )
 )
 if not defined PYTHON_EXE (
-    for /f "usebackq delims=" %%i in (`py -3.12 -c "import sys; print(sys.executable)" 2^>nul`) do (
-        set "PYTHON_EXE=%%i"
-    )
+    powershell -NoProfile -Command "$p = (Get-Command python -ErrorAction SilentlyContinue).Source; if($p -and $p -match 'Python312'){Write-Output $p}" > "%TEMP%\pypath.txt" 2>nul
+    set /p PYTHON_EXE=<"%TEMP%\pypath.txt"
+    del /f /q "%TEMP%\pypath.txt" >nul 2>&1
 )
 
 if not defined PYTHON_EXE (
