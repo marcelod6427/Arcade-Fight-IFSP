@@ -63,6 +63,11 @@ import psycopg2.extras
 import psycopg2.errors
 
 DATABASE_URL = os.getenv("DATABASE_URL", "")
+if not DATABASE_URL:
+    raise RuntimeError(
+        "DATABASE_URL não definida. "
+        "Configure em backend/.env (dev local) ou nas variáveis de ambiente do Render."
+    )
 
 
 def get_conn():
