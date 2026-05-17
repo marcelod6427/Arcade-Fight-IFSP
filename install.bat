@@ -84,10 +84,8 @@ echo  [2/6] Verificando Node.js...
 set "NODE_OK=0"
 if exist "C:\Program Files\nodejs\node.exe" set "NODE_OK=1"
 
-if "!NODE_OK!"=="0" (
-    where node >nul 2>&1
-    if not errorlevel 1 set "NODE_OK=1"
-)
+where node >nul 2>&1
+if not errorlevel 1 set "NODE_OK=1"
 
 if "!NODE_OK!"=="0" (
     echo  Node.js nao encontrado. Baixando instalador (~30 MB)...
