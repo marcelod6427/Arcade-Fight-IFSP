@@ -27,6 +27,8 @@
 //   window.Controls — objeto singleton com state, prev e todos os métodos
 // =============================================================================
 
+const DEBUG_GAMEPAD = true;
+
 const Controls = {
 
   // ── Estado atual de input dos dois jogadores ──────────────────────────────
@@ -172,6 +174,15 @@ const Controls = {
       for (let b = 0; b < 5; b++) {
         const btn = pad.buttons[this.mapping.buttons[b]];
         if (btn && btn.pressed) this.state[p].btn[b] = true;
+      }
+
+      // Debug: imprime índice e estado de todos os botões pressionados a cada frame
+      if (DEBUG_GAMEPAD) {
+        for (let i = 0; i < pad.buttons.length; i++) {
+          if (pad.buttons[i] && pad.buttons[i].pressed) {
+            console.log(`[Gamepad ${p}] Botão ${i}: pressionado`);
+          }
+        }
       }
     }
   },
