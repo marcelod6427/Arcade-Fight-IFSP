@@ -48,6 +48,14 @@ O servidor está hospedado gratuitamente no Render e o banco de dados utiliza o 
 
 ---
 
+## INICIALIZAÇÃO
+
+Para fazer a inicialização do projeto, faça o download do mesmo, baixe o .zip deste repositóio e extraia, abra como administrador o arquivo install.bat, após a instalação de todas as necessidades do jogo, ele permitira abrir direto do install.bat ou abrir pelo start.bat.
+
+-> Existe a possibilidade de o site que estou usando para hospedar as API's não inicializar tão rápido, caso isso ocorra, tente fechar os arquivos abertos e iniciar novamente depois de 10 segundos o start.bat.
+
+---
+
 ## DESENVOLVIDO POR
 
 Marcelo L. G. Filho — Projeto Integrador Técnico — IFSP
