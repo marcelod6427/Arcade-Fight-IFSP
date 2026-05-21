@@ -51,14 +51,26 @@ timeout /t 5 /nobreak >nul
 echo [2/2] Iniciando jogo (Electron)...
 echo.
 
-set "COUNTDOWN=15"
-:aguardar
-echo  Aguardando servidor online... !COUNTDOWN!s
-timeout /t 1 /nobreak >nul
-set /a COUNTDOWN=!COUNTDOWN!-1
-if !COUNTDOWN! gtr 0 goto :aguardar
-echo  Iniciando o jogo!
-echo.
+echo  Verificando servidor online...
+set "TENTATIVA=1"
+:verificar_servidor
+powershell -NoProfile -Command "try{$r=(Invoke-WebRequest -Uri 'https://arcade-fight-ifsp.onrender.com' -TimeoutSec 5 -UseBasicParsing).Content; if($r -match 'API rodando'){exit 0}else{exit 1}}catch{exit 1}"
+if !errorlevel!==0 (
+    echo  Servidor online! Iniciando o jogo...
+    echo.
+    goto :iniciar_electron
+)
+if !TENTATIVA!==10 (
+    echo  Servidor indisponivel. Iniciando em modo offline...
+    echo.
+    goto :iniciar_electron
+)
+echo  Aguardando servidor... (tentativa !TENTATIVA!)
+set /a TENTATIVA=!TENTATIVA!+1
+timeout /t 3 /nobreak >nul
+goto :verificar_servidor
+
+:iniciar_electron
 
 echo Para encerrar, feche a janela do jogo. O backend
 echo continuara rodando ate voce fechar a janela "Backend".

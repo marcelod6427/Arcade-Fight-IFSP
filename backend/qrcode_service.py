@@ -32,6 +32,7 @@ def gerar_qr_base64(url: str) -> str:
         border=3    → 3 módulos de margem branca ao redor (mínimo recomendado: 4)
         PyPNGImage  → renderizador puro Python sem dependência de Pillow/PIL
     """
+    
     import qrcode
     from qrcode.image.pure import PyPNGImage
 
