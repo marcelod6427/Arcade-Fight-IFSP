@@ -31,7 +31,7 @@
 //   window.Controls — objeto singleton com state, prev e todos os métodos
 // =============================================================================
 
-const DEBUG_GAMEPAD = true;
+const DEBUG_GAMEPAD = false;
 
 const Controls = {
 
@@ -177,22 +177,28 @@ const Controls = {
       const m  = this.mappings[p];
       const dz = m.deadzone;
 
-      // Analógico esquerdo — eixo horizontal e vertical
+      // Analógico esquerdo — horizontal + vertical para baixo (agachar)
+      // Eixo 1 negativo (cima) NÃO dispara up: em arcade stick o pulo é sempre
+      // pelo botão dedicado; eixo cima causava confirmações acidentais na tela SELECT.
       const h = pad.axes[m.axes[0]] || 0;
       const v = pad.axes[m.axes[1]] || 0;
       if (h < -dz) this.state[p].left  = true;
       if (h >  dz) this.state[p].right = true;
-      if (v < -dz) this.state[p].up    = true;
       if (v >  dz) this.state[p].down  = true;
 
-      // Botão de pulo físico do arcade
-      if (pad.buttons[m.up] && pad.buttons[m.up].pressed) this.state[p].up = true;
+      // Botão de pulo físico do arcade (único disparo válido para up)
+      const upBtn = pad.buttons[m.up];
+      if (upBtn && (typeof upBtn === 'object' ? upBtn.pressed : upBtn > 0)) {
+        this.state[p].up = true;
+      }
 
       // Botões de ação b0–b4 (-1 = sem mapeamento, ignorado)
       for (let b = 0; b < 5; b++) {
         if (m.buttons[b] < 0) continue;
         const btn = pad.buttons[m.buttons[b]];
-        if (btn && btn.pressed) this.state[p].btn[b] = true;
+        if (btn && (typeof btn === 'object' ? btn.pressed : btn > 0)) {
+          this.state[p].btn[b] = true;
+        }
       }
 
       // Debug: imprime índice e estado de todos os botões pressionados a cada frame
@@ -274,13 +280,17 @@ const Controls = {
           const v  = pad.axes[m.axes[1]] || 0;
           if (h < -dz) this.state[p].left  = true;
           if (h >  dz) this.state[p].right = true;
-          if (v < -dz) this.state[p].up    = true;
           if (v >  dz) this.state[p].down  = true;
-          if (pad.buttons[m.up] && pad.buttons[m.up].pressed) this.state[p].up = true;
+          const upBtn = pad.buttons[m.up];
+          if (upBtn && (typeof upBtn === 'object' ? upBtn.pressed : upBtn > 0)) {
+            this.state[p].up = true;
+          }
           for (let b = 0; b < 5; b++) {
             if (m.buttons[b] < 0) continue;
             const btn = pad.buttons[m.buttons[b]];
-            if (btn && btn.pressed) this.state[p].btn[b] = true;
+            if (btn && (typeof btn === 'object' ? btn.pressed : btn > 0)) {
+              this.state[p].btn[b] = true;
+            }
           }
         }
       }

@@ -716,8 +716,8 @@
           prev.v = v;
           for (let b = 0; b < pad.buttons.length; b++) {
             const pressed = !!(pad.buttons[b] && pad.buttons[b].pressed);
-            // Somente Cruz(0) e Bolinha(1) confirmam — os demais sao navegacao ou acao
-            if (pressed && !prev.btns[b] && (b === 0 || b === 1)) _menuGamepadConfirmar();
+            // Confirmar: btn0 ou btn1 (P1: verde/amarelo) | btn3 (P2: verde)
+            if (pressed && !prev.btns[b] && (b === 0 || b === 1 || b === 3)) _menuGamepadConfirmar();
             prev.btns[b] = pressed;
           }
         }
@@ -818,9 +818,9 @@
     // ── Atalhos globais de gamepad: L2 = single, R2 = multi ──
 
     // Loop RAF sempre ativo, independente do game loop e de painéis abertos.
-    // Monitora apenas L2 (btn 6) e R2 (btn 7) nos dois primeiros pads.
+    // Monitora apenas L2 (btn 6) e R2 (btn 5) do P2 (gamepad índice 1).
+    // P1 não tem botões de menu — só P2 possui L2/R2 (mapeados em Controls.mappings[1]).
     // Usa _shortcutPrev separado para não interferir com _menuGamepadPrev nem Controls.prev.
-    // Na primeira leitura do pad inicializa prev para não disparar em botões já pressionados.
     // Borda de subida em L2 → _ativarModoViaBotao('single')
     // Borda de subida em R2 → _ativarModoViaBotao('multi')
     function _iniciarShortcutsGamepad() {
@@ -828,24 +828,26 @@
         requestAnimationFrame(poll);
         if (!navigator.getGamepads) return;
         const pads = navigator.getGamepads();
-        for (let gi = 0; gi < 2; gi++) {
-          const pad = pads[gi];
-          if (!pad || !pad.connected) { _shortcutPrev[gi] = null; continue; }
-          if (!_shortcutPrev[gi]) {
-            // Primeira leitura: inicializa prev para nao disparar em botoes ja pressionados
-            _shortcutPrev[gi] = {
-              l2: !!(pad.buttons[6] && pad.buttons[6].pressed),
-              r2: !!(pad.buttons[7] && pad.buttons[7].pressed)
-            };
-            continue;
-          }
-          const l2 = !!(pad.buttons[6] && pad.buttons[6].pressed);
-          const r2 = !!(pad.buttons[7] && pad.buttons[7].pressed);
-          if (l2 && !_shortcutPrev[gi].l2) _ativarModoViaBotao('single');
-          if (r2 && !_shortcutPrev[gi].r2) _ativarModoViaBotao('multi');
-          _shortcutPrev[gi].l2 = l2;
-          _shortcutPrev[gi].r2 = r2;
+        // Apenas P2 (gamepad 1) tem botões de menu: L2=btn6 (single), R2=btn5 (multi)
+        const pad = pads[1];
+        if (!pad || !pad.connected) {
+          _shortcutPrev[1] = null;
+          return;
         }
+        if (!_shortcutPrev[1]) {
+          // Primeira leitura: inicializa prev para não disparar em botões já pressionados
+          _shortcutPrev[1] = {
+            l2: !!(pad.buttons[6] && pad.buttons[6].pressed),
+            r2: !!(pad.buttons[5] && pad.buttons[5].pressed)
+          };
+          return;
+        }
+        const l2 = !!(pad.buttons[6] && pad.buttons[6].pressed);
+        const r2 = !!(pad.buttons[5] && pad.buttons[5].pressed);
+        if (l2 && !_shortcutPrev[1].l2) _ativarModoViaBotao('single');
+        if (r2 && !_shortcutPrev[1].r2) _ativarModoViaBotao('multi');
+        _shortcutPrev[1].l2 = l2;
+        _shortcutPrev[1].r2 = r2;
       }
       requestAnimationFrame(poll);
     }
