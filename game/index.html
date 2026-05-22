@@ -370,15 +370,18 @@
     let _salaId  = null;
     let _tokenP1 = null;
     let _nickP1  = null;
-    let _nickP2      = null;
-    let _polling     = null;
-    let _dif         = 'medio';
-    let _modoOffline = false;
-    let _telaAtual   = 'inicial';
-    let _focusIdx    = 0;
-    let _menuGamepadRAF  = null;
-    let _menuGamepadPrev = {};
-    let _shortcutPrev    = {};
+    let _nickP2           = null;
+    let _polling          = null;
+    let _dif              = 'medio';
+    let _modoOffline      = false;
+    let _telaAtual        = 'inicial';
+    let _focusIdx         = 0;
+    let _menuGamepadRAF   = null;
+    let _menuGamepadPrev  = {};
+    let _shortcutPrev     = {};
+    // Impede que chamadas concorrentes de _verificarSala() iniciem o jogo duas vezes.
+    // Resetado em mostrarBotoesInicio() para permitir novas partidas.
+    let _jaProntoParaJogar = false;
 
     // ── Escala canvas + overlay para preencher a tela ─────
     // Mantém proporção 16:9 (1280×720) via letter/pillarbox.
@@ -475,6 +478,7 @@
     // (a própria notifOffline já gerencia o poll).
     function mostrarBotoesInicio() {
       _stopPolling();
+      _jaProntoParaJogar = false;
       _salaId = null; _tokenP1 = null;
       _nickP1 = null; _nickP2 = null;
 
@@ -629,10 +633,14 @@
     //   → Chama Game.iniciarFluxo(modo, _salaId, _tokenP1)
     //     e Game.jogadoresEntraramprontos([nick1, nick2]) para iniciar o SELECT
     async function _verificarSala() {
-      if (!_salaId) return;
+      // Bail out se já processamos esta sala ou se o polling foi cancelado
+      if (!_salaId || _jaProntoParaJogar) return;
       try {
         const sala = await Api.statusSala(_salaId);
         if (!sala.ok) return;
+
+        // Re-verifica após o await: outra chamada concorrente pode ter chegado primeiro
+        if (_jaProntoParaJogar) return;
 
         if (sala.jogador1) {
           _tokenP1 = sala.jogador1.token;
@@ -645,14 +653,18 @@
         }
 
         if (sala.status === 'pronto' || sala.status === 'em_jogo') {
+          _jaProntoParaJogar = true; // bloqueia qualquer chamada concorrente ainda em voo
           _stopPolling();
           esconder('painelQR');
           document.getElementById('btnVoltar').classList.remove('visible');
 
-          const nick1 = _nickP1 || 'P1';
-          const nick2 = _nickP2 || (sala.modo === 'single' ? 'CPU' : 'P2');
+          const nick1    = _nickP1 || 'P1';
+          const nick2    = _nickP2 || (sala.modo === 'single' ? 'CPU' : 'P2');
+          const modoSnap = sala.modo;
+          const idSnap   = _salaId;
+          const tkSnap   = _tokenP1;
 
-          Game.iniciarFluxo(sala.modo, _salaId, _tokenP1);
+          Game.iniciarFluxo(modoSnap, idSnap, tkSnap);
           Game.jogadoresEntraramprontos([nick1, nick2]);
         }
       } catch (e) {
@@ -817,15 +829,16 @@
 
     // ── Atalhos globais de gamepad: L2 = single, R2 = multi ──
 
-    // Loop RAF sempre ativo, independente do game loop e de painéis abertos.
-    // Monitora apenas L2 (btn 6) e R2 (btn 5) do P2 (gamepad índice 1).
-    // P1 não tem botões de menu — só P2 possui L2/R2 (mapeados em Controls.mappings[1]).
-    // Usa _shortcutPrev separado para não interferir com _menuGamepadPrev nem Controls.prev.
+    // Monitora L2 (btn 6) e R2 (btn 5) do P2 (gamepad índice 1) a cada 100ms.
+    // Usa setInterval em vez de RAF para não competir com o game loop na leitura
+    // de getGamepads() — dois callers RAF simultâneos causam sincronização dupla
+    // com a thread HID do USB, gerando micro-stutters visíveis nos sprites.
+    // 100ms é suficiente para resposta a botões de menu (não precisa de 60fps).
+    // P1 não tem botões de menu — só P2 possui L2/R2 (Controls.mappings[1].l2/r2).
     // Borda de subida em L2 → _ativarModoViaBotao('single')
     // Borda de subida em R2 → _ativarModoViaBotao('multi')
     function _iniciarShortcutsGamepad() {
       function poll() {
-        requestAnimationFrame(poll);
         if (!navigator.getGamepads) return;
         const pads = navigator.getGamepads();
         // Apenas P2 (gamepad 1) tem botões de menu: L2=btn6 (single), R2=btn5 (multi)
@@ -849,7 +862,8 @@
         _shortcutPrev[1].l2 = l2;
         _shortcutPrev[1].r2 = r2;
       }
-      requestAnimationFrame(poll);
+      poll(); // leitura imediata para inicializar prev antes do primeiro tick
+      setInterval(poll, 100);
     }
 
     // Trata o pressionamento de L2/R2 conforme o estado atual do jogo.
