@@ -12,20 +12,26 @@
 //   P1: A/D mover | W/Espaço pular | J=b0 K=b1 L=b2 I=b3 U=b4
 //   P2: ◄/► mover | ▲ pular       | Num1=b0 Num2=b1 Num3=b2 Num5=b3 Num4=b4
 //
-// Mapeamento gamepad (padrão PlayStation/Xbox):
-//   Analógico esquerdo eixo 0 → esquerda/direita
-//   D-pad (btns 12–15)        → cima/baixo/esquerda/direita
-//   Cruz/A (btn 0)            → pular (up)
-//   Bolinha/B (btn 1)         → b0 (ataque rápido)
-//   Quadrado/X (btn 2)        → b1 (ataque forte)
-//   L1/LB (btn 4)             → b2 (defender)
-//   Triângulo/Y (btn 3)       → b3 (especial)
-//   R1/RB (btn 5)             → b4 (counter)
-//   L2 (btn 6) / R2 (btn 7)  → atalhos de modo SINGLE/MULTI — tratados em index.html
+// Mapeamento gamepad (arcade físico — índices reais detectados via DEBUG_GAMEPAD):
+//
+//   Player 1 (gamepad 0):
+//     Eixo 0 → esquerda/direita   Eixo 1 → cima/baixo
+//     Btn 0 (verde)    → pulo     Btn 1 (amarelo) → b0 ataque rápido
+//     Btn 4 (preto)    → b1 ataque forte           Btn 3 (azul)    → b3 especial
+//     Btn 2 (vermelho) → b4 counter                (sem botões de menu)
+//
+//   Player 2 (gamepad 1):
+//     Eixo 0 → esquerda/direita   Eixo 1 → cima/baixo
+//     Btn 3 (verde)    → pulo     Btn 0 (amarelo) → b0 ataque rápido
+//     Btn 4 (preto)    → b1 ataque forte           Btn 2 (azul)    → b3 especial
+//     Btn 1 (vermelho) → b4 counter
+//     Btn 6 (single)   → L2 menu  Btn 5 (multi)   → R2 menu — tratados em index.html
 //
 // Exporta para window:
 //   window.Controls — objeto singleton com state, prev e todos os métodos
 // =============================================================================
+
+const DEBUG_GAMEPAD = true;
 
 const Controls = {
 
@@ -46,15 +52,32 @@ const Controls = {
     { left: false, right: false, up: false, down: false, btn: [false, false, false, false, false] }
   ],
 
-  // ── Configuração do gamepad ───────────────────────────────────────────────
-  // buttons: índices físicos dos botões do gamepad para cada ação b0–b4
+  // ── Configuração do gamepad (por jogador) ────────────────────────────────
+  // up:      índice do botão físico que dispara pulo
+  // buttons: índices físicos para b0–b4 (-1 = sem botão mapeado, ignorado)
+  // l2/r2:   botões de menu single/multi (-1 = não existe neste controle)
   // axes:    [eixo horizontal, eixo vertical] do analógico esquerdo
-  // deadzone: valor mínimo de deflexão do analógico para ser considerado input
-  mapping: {
-    buttons: [1, 2, 4, 3, 5], // b0=Bolinha(1) b1=Quadrado(2) b2=L1(4) b3=Triângulo(3) b4=R1(5)
-    axes:    [0, 1],
-    deadzone: 0.3
-  },
+  // deadzone: deflexão mínima do analógico para ser considerado input
+  mappings: [
+    // Player 1 — gamepad índice 0
+    {
+      up:      0,                 // verde  → pulo
+      buttons: [1, 4, -1, 3, 2], // b0=amarelo(1) b1=preto(4) b2=sem mapeamento b3=azul(3) b4=vermelho(2)
+      l2:      -1,
+      r2:      -1,
+      axes:    [0, 1],
+      deadzone: 0.3
+    },
+    // Player 2 — gamepad índice 1
+    {
+      up:      3,                 // verde  → pulo
+      buttons: [0, 4, -1, 2, 1], // b0=amarelo(0) b1=preto(4) b2=sem mapeamento b3=azul(2) b4=vermelho(1)
+      l2:      6,                 // single → volta ao menu / abre single
+      r2:      5,                 // multi  → volta ao menu / abre multi
+      axes:    [0, 1],
+      deadzone: 0.3
+    }
+  ],
 
   // ── Mapeamento de teclado — P1 ────────────────────────────────────────────
   // Chave: e.code da KeyboardEvent | Valor: ação no estado do player
@@ -151,27 +174,34 @@ const Controls = {
       const pad = pads[p];
       if (!pad || !pad.connected) continue;
 
-      const dz = this.mapping.deadzone;
-      const ax = this.mapping.axes;
+      const m  = this.mappings[p];
+      const dz = m.deadzone;
 
-      // Analógico esquerdo — apenas eixo horizontal (eixo vertical não pula)
-      const h = pad.axes[ax[0]] || 0;
+      // Analógico esquerdo — eixo horizontal e vertical
+      const h = pad.axes[m.axes[0]] || 0;
+      const v = pad.axes[m.axes[1]] || 0;
       if (h < -dz) this.state[p].left  = true;
       if (h >  dz) this.state[p].right = true;
+      if (v < -dz) this.state[p].up    = true;
+      if (v >  dz) this.state[p].down  = true;
 
-      // D-pad digital (botões 12–15 no layout padrão do navegador)
-      if (pad.buttons[12] && pad.buttons[12].pressed) this.state[p].up    = true;
-      if (pad.buttons[13] && pad.buttons[13].pressed) this.state[p].down  = true;
-      if (pad.buttons[14] && pad.buttons[14].pressed) this.state[p].left  = true;
-      if (pad.buttons[15] && pad.buttons[15].pressed) this.state[p].right = true;
+      // Botão de pulo físico do arcade
+      if (pad.buttons[m.up] && pad.buttons[m.up].pressed) this.state[p].up = true;
 
-      // Cruz/A (btn 0) — pulo (equivalente ao W/Espaço no teclado)
-      if (pad.buttons[0] && pad.buttons[0].pressed) this.state[p].up = true;
-
-      // Botões de ação b0–b4 — lidos via mapping.buttons para respeitar o layout PS
+      // Botões de ação b0–b4 (-1 = sem mapeamento, ignorado)
       for (let b = 0; b < 5; b++) {
-        const btn = pad.buttons[this.mapping.buttons[b]];
+        if (m.buttons[b] < 0) continue;
+        const btn = pad.buttons[m.buttons[b]];
         if (btn && btn.pressed) this.state[p].btn[b] = true;
+      }
+
+      // Debug: imprime índice e estado de todos os botões pressionados a cada frame
+      if (DEBUG_GAMEPAD) {
+        for (let i = 0; i < pad.buttons.length; i++) {
+          if (pad.buttons[i] && pad.buttons[i].pressed) {
+            console.log(`[Gamepad ${p}] Botão ${i}: pressionado`);
+          }
+        }
       }
     }
   },
@@ -238,17 +268,18 @@ const Controls = {
       if (navigator.getGamepads) {
         const pad = navigator.getGamepads()[p];
         if (pad && pad.connected) {
-          const dz = this.mapping.deadzone;
-          const h  = pad.axes[this.mapping.axes[0]] || 0;
+          const m  = this.mappings[p];
+          const dz = m.deadzone;
+          const h  = pad.axes[m.axes[0]] || 0;
+          const v  = pad.axes[m.axes[1]] || 0;
           if (h < -dz) this.state[p].left  = true;
           if (h >  dz) this.state[p].right = true;
-          if (pad.buttons[12] && pad.buttons[12].pressed) this.state[p].up    = true;
-          if (pad.buttons[13] && pad.buttons[13].pressed) this.state[p].down  = true;
-          if (pad.buttons[14] && pad.buttons[14].pressed) this.state[p].left  = true;
-          if (pad.buttons[15] && pad.buttons[15].pressed) this.state[p].right = true;
-          if (pad.buttons[0]  && pad.buttons[0].pressed)  this.state[p].up    = true;
+          if (v < -dz) this.state[p].up    = true;
+          if (v >  dz) this.state[p].down  = true;
+          if (pad.buttons[m.up] && pad.buttons[m.up].pressed) this.state[p].up = true;
           for (let b = 0; b < 5; b++) {
-            const btn = pad.buttons[this.mapping.buttons[b]];
+            if (m.buttons[b] < 0) continue;
+            const btn = pad.buttons[m.buttons[b]];
             if (btn && btn.pressed) this.state[p].btn[b] = true;
           }
         }
