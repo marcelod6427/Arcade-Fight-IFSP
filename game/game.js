@@ -44,9 +44,10 @@ let spriteManager; // instância de SpriteManager (sprites.js)
 let gameState = 'LOADING';
 
 // Dados da sala online (null em modo offline)
-let salaId    = null;  // ID da sala no backend
-let salaToken = null;  // JWT do P1 usado para registrar resultado
-let salaModo  = null;  // 'single' | 'multi'
+let salaId      = null;  // ID da sala no backend
+let salaToken   = null;  // JWT do P1 usado para registrar resultado
+let salaTokenP2 = null;  // JWT do P2 (null em modo offline e single)
+let salaModo    = null;  // 'single' | 'multi'
 
 // Nomes dos jogadores (preenchidos por jogadoresEntraramprontos)
 let nickP1 = 'P1';
@@ -259,8 +260,6 @@ class Fighter {
     if (!this.atacando && !this.bloqueando) {
       if (!this.noChao) {
         spriteManager.setAnim(this.animState, 'JUMP');
-      } else if (Math.abs(this.vx) > this.speed * 0.8) {
-        spriteManager.setAnim(this.animState, 'RUN');
       } else if (movendo) {
         spriteManager.setAnim(this.animState, 'WALK');
       } else {
@@ -821,7 +820,7 @@ function _drawHUD() {
   // ── Indicador de round e vitórias ──
   ctx.textAlign = 'center'; ctx.font = 'bold 18px monospace'; ctx.fillStyle = '#e94560';
   ctx.fillText(`ROUND ${roundAtual}`, W / 2, 30);
-  for (let i = 0; i < maxRounds; i++) {
+  for (let i = 0; i < 2; i++) {
     const cx1 = W / 2 - 60 + i * 20;
     const cx2 = W / 2 + 60 - i * 20;
     ctx.beginPath(); ctx.arc(cx1, 46, 7, 0, Math.PI * 2);
@@ -909,8 +908,8 @@ function _drawSelect() {
   ctx.fillStyle = '#888'; ctx.font = '14px monospace';
   ctx.fillText(
     numPlayers === 2
-      ? 'P1: A/D mover | W/Espaço confirmar      P2: ◄/► mover | Seta Cima confirmar'
-      : 'Use A/D para mover  |  W ou Espaço para confirmar',
+      ? 'P1: ◄ ► mover  |  🟢 confirmar                    P2: ◄ ► mover  |  🟢 confirmar'
+      : '◄ ► mover   |   🟢 confirmar',
     W / 2, 88
   );
 
@@ -1102,10 +1101,11 @@ function _roundRect(ctx, x, y, w, h, r) {
 // modo: 'single' | 'multi'
 // id: sala_id do backend (null em modo offline)
 // tokenP1: JWT do P1 para registrar resultado (null em modo offline)
-function iniciarFluxo(modo, id, tokenP1) {
-  salaId    = id;
-  salaToken = tokenP1;
-  salaModo  = modo;
+function iniciarFluxo(modo, id, tokenP1, tokenP2 = null) {
+  salaId      = id;
+  salaToken   = tokenP1;
+  salaTokenP2 = tokenP2;
+  salaModo    = modo;
 
   selecao = { cursor: [0, 1], escolhido: [null, null] };
 
@@ -1154,25 +1154,33 @@ async function _encerrarPartida() {
   // Sem sala/token = modo offline; resultado não é enviado
   if (!salaId || !salaToken) return;
 
-  const pontos_j1 = fighters[0] ? fighters[0].pontos : 0;
-  const pontos_j2 = fighters[1] ? fighters[1].pontos : 0;
+  const venceuIdx  = vitorias[0] > vitorias[1] ? 0 : 1;
+  const tokenVenc  = venceuIdx === 0 ? salaToken : (salaTokenP2 || salaToken);
+  const pontos_j1  = fighters[0] ? fighters[0].pontos : 0;
+  const pontos_j2  = fighters[1] ? fighters[1].pontos : 0;
 
-  // api.js → POST /partida/resultado no backend FastAPI
-  const resultado = await Api.registrarResultado(salaId, salaToken, pontos_j1, pontos_j2);
+  console.log('[Game] Encerrando partida. Vencedor:', fighters[venceuIdx]?.nome || `P${venceuIdx + 1}`,
+    `| Vitórias: ${vitorias[0]}x${vitorias[1]} | Pontos: ${pontos_j1}x${pontos_j2}`);
 
-  if (!resultado.ok) {
-    console.warn('[Game] Erro ao registrar resultado:', resultado.erro);
-  } else {
-    console.log('[Game] Resultado registrado:', resultado);
+  try {
+    const resultado = await Api.registrarResultado(salaId, tokenVenc, pontos_j1, pontos_j2);
+    if (!resultado.ok) {
+      console.warn('[Game] Falha ao registrar resultado:', resultado.erro);
+    } else {
+      console.log('[Game] Resultado registrado com sucesso:', resultado);
+    }
+  } catch (e) {
+    console.error('[Game] Erro inesperado ao registrar resultado:', e);
   }
 }
 
 // Reseta todo o estado de partida e retorna ao menu principal.
 // Chamado por Game.voltarInicio() (exposto ao index.html) e pelo listener 'game:telaInicial'.
 function _voltarInicio() {
-  salaId     = null;
-  salaToken  = null;
-  fighters   = [];
+  salaId      = null;
+  salaToken   = null;
+  salaTokenP2 = null;
+  fighters    = [];
   projeteis  = [];
   vitorias   = [0, 0];
   roundAtual = 1;

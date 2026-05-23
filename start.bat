@@ -60,12 +60,12 @@ if !errorlevel!==0 (
     echo.
     goto :iniciar_electron
 )
-if !TENTATIVA!==10 (
-    echo  Servidor indisponivel. Iniciando em modo offline...
+if !TENTATIVA!==4 (
+    echo  Conexao falhou apos 4 tentativas. Iniciando modo offline...
     echo.
     goto :iniciar_electron
 )
-echo  Aguardando servidor... (tentativa !TENTATIVA!)
+echo  Aguardando servidor... (tentativa !TENTATIVA!/4)
 set /a TENTATIVA=!TENTATIVA!+1
 timeout /t 3 /nobreak >nul
 goto :verificar_servidor

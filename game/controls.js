@@ -5,8 +5,8 @@
 // Cada jogador tem 4 direções e 5 botões de ação (b0–b4).
 //
 // Mapeamento de ações:
-//   b0 = ataque rápido   b1 = ataque forte   b2 = defender
-//   b3 = especial        b4 = counter
+//   b0 = ataque rápido   b1 = ataque forte   b2 = bloquear
+//   b3 = especial        b4 = counter (sem mapeamento gamepad)
 //
 // Mapeamento teclado:
 //   P1: A/D mover | W/Espaço pular | J=b0 K=b1 L=b2 I=b3 U=b4
@@ -18,13 +18,13 @@
 //     Eixo 0 → esquerda/direita   Eixo 1 → cima/baixo
 //     Btn 0 (verde)    → pulo     Btn 1 (amarelo) → b0 ataque rápido
 //     Btn 4 (preto)    → b1 ataque forte           Btn 3 (azul)    → b3 especial
-//     Btn 2 (vermelho) → b4 counter                (sem botões de menu)
+//     Btn 2 (vermelho) → b2 bloquear               (sem botões de menu)
 //
 //   Player 2 (gamepad 1):
 //     Eixo 0 → esquerda/direita   Eixo 1 → cima/baixo
 //     Btn 3 (verde)    → pulo     Btn 0 (amarelo) → b0 ataque rápido
 //     Btn 4 (preto)    → b1 ataque forte           Btn 2 (azul)    → b3 especial
-//     Btn 1 (vermelho) → b4 counter
+//     Btn 1 (vermelho) → b2 bloquear
 //     Btn 6 (single)   → L2 menu  Btn 5 (multi)   → R2 menu — tratados em index.html
 //
 // Exporta para window:
@@ -62,7 +62,7 @@ const Controls = {
     // Player 1 — gamepad índice 0
     {
       up:      0,                 // verde  → pulo
-      buttons: [1, 4, -1, 3, 2], // b0=amarelo(1) b1=preto(4) b2=sem mapeamento b3=azul(3) b4=vermelho(2)
+      buttons: [1, 4, 2, 3, -1], // b0=amarelo(1) b1=preto(4) b2=vermelho(2) b3=azul(3) b4=sem mapeamento
       l2:      -1,
       r2:      -1,
       axes:    [0, 1],
@@ -71,7 +71,7 @@ const Controls = {
     // Player 2 — gamepad índice 1
     {
       up:      3,                 // verde  → pulo
-      buttons: [0, 4, -1, 2, 1], // b0=amarelo(0) b1=preto(4) b2=sem mapeamento b3=azul(2) b4=vermelho(1)
+      buttons: [0, 4, 1, 2, -1], // b0=amarelo(0) b1=preto(4) b2=vermelho(1) b3=azul(2) b4=sem mapeamento
       l2:      6,                 // single → volta ao menu / abre single
       r2:      5,                 // multi  → volta ao menu / abre multi
       axes:    [0, 1],

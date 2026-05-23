@@ -178,6 +178,20 @@
     }
     #btnPularPlacar:hover, #btnPularPlacar.focused { background: #e94560; color: #fff; }
 
+    /* ── Jogar sem Login ── */
+    #btnJogarSemLogin {
+      margin-top: 10px;
+      padding: 9px 22px; border-radius: 8px;
+      border: 2px solid #666;
+      background: transparent;
+      color: #888; font-size: 12px; font-weight: 700;
+      cursor: pointer; transition: all .15s; pointer-events: all;
+      display: block; margin-left: auto; margin-right: auto;
+    }
+    #btnJogarSemLogin:hover, #btnJogarSemLogin.focused {
+      border-color: #ff9800; color: #ff9800;
+    }
+
     /* ── Mensagem de erro/info ── */
     #msgErro {
       display: none; position: absolute; bottom: 30px;
@@ -229,24 +243,20 @@
     <!-- Legendas (só durante a luta) -->
     <div class="legenda-controles legenda-p1" id="legendaP1">
       <h4>◄ PLAYER 1</h4>
-      <span>A/D</span> mover<br>
-      <span>W / ESPAÇO</span> pular<br>
-      <span>J</span> ataque rápido<br>
-      <span>K</span> ataque forte<br>
-      <span>L</span> defender<br>
-      <span>I</span> especial<br>
-      <span>U</span> counter
+      🟢 Pular<br>
+      🟡 Ataque rápido<br>
+      ⚫ Ataque forte<br>
+      🔴 Bloquear<br>
+      🔵 Especial
     </div>
 
     <div class="legenda-controles legenda-p2" id="legendaP2">
       <h4>PLAYER 2 ►</h4>
-      <span>◄ ►</span> mover<br>
-      <span>▲</span> pular<br>
-      <span>Num 1</span> ataque rápido<br>
-      <span>Num 2</span> ataque forte<br>
-      <span>Num 3</span> defender<br>
-      <span>Num 5</span> especial<br>
-      <span>Num 4</span> counter
+      🟢 Pular<br>
+      🟡 Ataque rápido<br>
+      ⚫ Ataque forte<br>
+      🔴 Bloquear<br>
+      🔵 Especial
     </div>
 
     <!-- Overlay QR placar (pós GAME OVER) -->
@@ -286,6 +296,7 @@
         <div class="slot-jogador p1 aguardando" id="slotP1">P1 — Aguardando</div>
         <div class="slot-jogador p2 aguardando" id="slotP2" style="display:none">P2 — Aguardando</div>
       </div>
+      <button id="btnJogarSemLogin" onclick="jogarSemLogin()">▶ Jogar sem Login</button>
     </div>
 
     <!-- Notificação offline (aguarda escolha do jogador, sem timer) -->
@@ -369,6 +380,7 @@
     let _modo    = null;
     let _salaId  = null;
     let _tokenP1 = null;
+    let _tokenP2 = null;
     let _nickP1  = null;
     let _nickP2           = null;
     let _polling          = null;
@@ -388,8 +400,8 @@
     // Chamada no boot e a cada resize da janela Electron.
     // O overlay usa CSS transform: scale() para que seus filhos operem em px 1280×720.
     function ajustarTela() {
-      const sw = window.innerWidth;
-      const sh = window.innerHeight;
+      const sw = window.innerWidth  || screen.width;
+      const sh = window.innerHeight || screen.height;
       const scale = Math.min(sw / 1280, sh / 720);
       const cw   = Math.round(1280 * scale);
       const ch   = Math.round(720  * scale);
@@ -423,6 +435,8 @@
     window.addEventListener('DOMContentLoaded', async () => {
       ajustarTela();
       window.addEventListener('resize', ajustarTela);
+      document.addEventListener('fullscreenchange', ajustarTela);
+      setTimeout(ajustarTela, 200); // garante escala correta após Electron entrar em fullscreen
 
       // Registra teclado imediatamente — necessario para navegar na notif offline
       // que aparece antes de Game.init() terminar
@@ -479,7 +493,7 @@
     function mostrarBotoesInicio() {
       _stopPolling();
       _jaProntoParaJogar = false;
-      _salaId = null; _tokenP1 = null;
+      _salaId = null; _tokenP1 = null; _tokenP2 = null;
       _nickP1 = null; _nickP2 = null;
 
       const el = document.getElementById('botoesInicio');
@@ -545,6 +559,21 @@
         return;
       }
       criarSala('single');
+    }
+
+    // Inicia o jogo sem autenticação, descartando a sala online ativa.
+    // Só aparece no painelQR (modo online) — inicia com nicks "Guest".
+    function jogarSemLogin() {
+      _stopPolling();
+      if (_salaId) {
+        try { Api.cancelarSala && Api.cancelarSala(_salaId); } catch(e) {}
+        _salaId = null;
+      }
+      esconder('painelQR');
+      document.getElementById('btnVoltar').classList.remove('visible');
+      const nick2 = _modo === 'multi' ? 'Guest2' : 'CPU';
+      Game.iniciarFluxo(_modo, null, null, null);
+      Game.jogadoresEntraramprontos(['Guest1', nick2]);
     }
 
     // Cancela a sala atual (se existir) e volta para a tela inicial.
@@ -648,6 +677,7 @@
           _atualizar_slot('slotP1', '✓ ' + sala.jogador1.nick, true);
         }
         if (sala.jogador2) {
+          _tokenP2 = sala.jogador2.token || null;
           _nickP2  = sala.jogador2.nick;
           _atualizar_slot('slotP2', '✓ ' + sala.jogador2.nick, true);
         }
@@ -663,8 +693,9 @@
           const modoSnap = sala.modo;
           const idSnap   = _salaId;
           const tkSnap   = _tokenP1;
+          const tkSnap2  = _tokenP2;
 
-          Game.iniciarFluxo(modoSnap, idSnap, tkSnap);
+          Game.iniciarFluxo(modoSnap, idSnap, tkSnap, tkSnap2);
           Game.jogadoresEntraramprontos([nick1, nick2]);
         }
       } catch (e) {
@@ -893,7 +924,7 @@
       _stopPolling();
       if (_salaId) {
         try { Api.cancelarSala(_salaId); } catch(e) {}
-        _salaId = null; _tokenP1 = null; _nickP1 = null; _nickP2 = null;
+        _salaId = null; _tokenP1 = null; _tokenP2 = null; _nickP1 = null; _nickP2 = null;
       }
       Game.voltarInicio();
       esconderQrPlacar();
@@ -1003,7 +1034,10 @@
         return Array.from(document.querySelectorAll('#painelDificuldade .btn-dif'));
       }
       if (_telaAtual === 'qr') {
-        return [document.getElementById('btnVoltar')];
+        return [
+          document.getElementById('btnVoltar'),
+          document.getElementById('btnJogarSemLogin')
+        ].filter(Boolean);
       }
       return [];
     }
