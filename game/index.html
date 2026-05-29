@@ -860,7 +860,7 @@
 
     // ── Atalhos globais de gamepad: L2 = single, R2 = multi ──
 
-    // Monitora L2 (btn 6) e R2 (btn 5) do P2 (gamepad índice 1) a cada 100ms.
+    // Monitora L2 (btn 7 = single) e R2 (btn 6 = multi) do P2 (gamepad índice 1) a cada 100ms.
     // Usa setInterval em vez de RAF para não competir com o game loop na leitura
     // de getGamepads() — dois callers RAF simultâneos causam sincronização dupla
     // com a thread HID do USB, gerando micro-stutters visíveis nos sprites.
@@ -881,13 +881,13 @@
         if (!_shortcutPrev[1]) {
           // Primeira leitura: inicializa prev para não disparar em botões já pressionados
           _shortcutPrev[1] = {
-            l2: !!(pad.buttons[6] && pad.buttons[6].pressed),
-            r2: !!(pad.buttons[5] && pad.buttons[5].pressed)
+            l2: !!(pad.buttons[7] && pad.buttons[7].pressed),
+            r2: !!(pad.buttons[6] && pad.buttons[6].pressed)
           };
           return;
         }
-        const l2 = !!(pad.buttons[6] && pad.buttons[6].pressed);
-        const r2 = !!(pad.buttons[5] && pad.buttons[5].pressed);
+        const l2 = !!(pad.buttons[7] && pad.buttons[7].pressed);
+        const r2 = !!(pad.buttons[6] && pad.buttons[6].pressed);
         if (l2 && !_shortcutPrev[1].l2) _ativarModoViaBotao('single');
         if (r2 && !_shortcutPrev[1].r2) _ativarModoViaBotao('multi');
         _shortcutPrev[1].l2 = l2;

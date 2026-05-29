@@ -16,16 +16,16 @@
 //
 //   Player 1 (gamepad 0):
 //     Eixo 0 → esquerda/direita   Eixo 1 → cima/baixo
-//     Btn 0 (verde)    → pulo     Btn 1 (amarelo) → b0 ataque rápido
-//     Btn 4 (preto)    → b1 ataque forte           Btn 3 (azul)    → b3 especial
-//     Btn 2 (vermelho) → b2 bloquear               (sem botões de menu)
+//     Btn 1 (verde)    → pulo     Btn 2 (amarelo) → b0 ataque rápido
+//     Btn 5 (preto)    → b1 ataque forte           Btn 4 (azul)    → b3 especial
+//     Btn 3 (vermelho) → b2 bloquear               (sem botões de menu)
 //
 //   Player 2 (gamepad 1):
 //     Eixo 0 → esquerda/direita   Eixo 1 → cima/baixo
-//     Btn 3 (verde)    → pulo     Btn 0 (amarelo) → b0 ataque rápido
-//     Btn 4 (preto)    → b1 ataque forte           Btn 2 (azul)    → b3 especial
-//     Btn 1 (vermelho) → b2 bloquear
-//     Btn 6 (single)   → L2 menu  Btn 5 (multi)   → R2 menu — tratados em index.html
+//     Btn 4 (verde)    → pulo     Btn 1 (amarelo) → b0 ataque rápido
+//     Btn 5 (preto)    → b1 ataque forte           Btn 3 (azul)    → b3 especial
+//     Btn 2 (vermelho) → b2 bloquear
+//     Btn 7 (single)   → L2 menu  Btn 6 (multi)   → R2 menu — tratados em index.html
 //
 // Exporta para window:
 //   window.Controls — objeto singleton com state, prev e todos os métodos
@@ -61,8 +61,8 @@ const Controls = {
   mappings: [
     // Player 1 — gamepad índice 0
     {
-      up:      0,                 // verde  → pulo
-      buttons: [1, 4, 2, 3, -1], // b0=amarelo(1) b1=preto(4) b2=vermelho(2) b3=azul(3) b4=sem mapeamento
+      up:      1,                 // verde(1)  → pulo
+      buttons: [2, 5, 3, 4, -1], // b0=amarelo(2) b1=preto(5) b2=vermelho(3) b3=azul(4) b4=sem mapeamento
       l2:      -1,
       r2:      -1,
       axes:    [0, 1],
@@ -70,10 +70,10 @@ const Controls = {
     },
     // Player 2 — gamepad índice 1
     {
-      up:      3,                 // verde  → pulo
-      buttons: [0, 4, 1, 2, -1], // b0=amarelo(0) b1=preto(4) b2=vermelho(1) b3=azul(2) b4=sem mapeamento
-      l2:      6,                 // single → volta ao menu / abre single
-      r2:      5,                 // multi  → volta ao menu / abre multi
+      up:      4,                 // verde(4)  → pulo
+      buttons: [1, 5, 2, 3, -1], // b0=amarelo(1) b1=preto(5) b2=vermelho(2) b3=azul(3) b4=sem mapeamento
+      l2:      7,                 // single(7) → volta ao menu / abre single
+      r2:      6,                 // multi(6)  → volta ao menu / abre multi
       axes:    [0, 1],
       deadzone: 0.3
     }
