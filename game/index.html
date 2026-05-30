@@ -214,6 +214,20 @@
     #btnConfig.visible { display: block; }
     #btnConfig:hover, #btnConfig.focused { border-color: #e94560; color: #e94560; }
 
+    /* ── Botão Fechar Jogo (canto superior direito, espelho do Config) ── */
+    #btnFechar {
+      position: absolute; top: 15px; right: 15px;
+      display: none;
+      padding: 9px 14px; border-radius: 10px;
+      font-size: 15px; font-weight: 700; cursor: pointer;
+      border: 2px solid #3a3a4a;
+      background: rgba(15,15,26,0.85);
+      color: #666; transition: all .15s; pointer-events: all;
+      z-index: 5; font-family: monospace; letter-spacing: 1px;
+    }
+    #btnFechar.visible { display: block; }
+    #btnFechar:hover, #btnFechar.focused { border-color: #e94560; color: #e94560; }
+
     /* ── Painel de configurações (com abas) ── */
     #painelConfig {
       display: none;
@@ -346,6 +360,40 @@
     .config-creditos ul li::before { content: '▸ '; color: #e94560; }
     .config-creditos strong { color: #e94560; }
 
+    /* ── Modal de confirmação de saída da partida ── */
+    #confirmSaida {
+      display: none; position: absolute; top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.72);
+      z-index: 90;
+      align-items: center; justify-content: center;
+      pointer-events: all;
+    }
+    #confirmSaida.visible { display: flex; }
+    .confirm-box {
+      background: rgba(15,15,26,0.97);
+      border: 2px solid #e94560;
+      border-radius: 18px;
+      padding: 36px 48px 28px;
+      text-align: center;
+      max-width: 480px;
+    }
+    .confirm-box h3 { color: #e94560; font-size: 22px; margin-bottom: 12px; letter-spacing: 1px; }
+    .confirm-box p  { color: #aaa; font-size: 13px; line-height: 1.8; margin-bottom: 26px; }
+    .confirm-box p strong { color: #ffd700; }
+    .confirm-btns { display: flex; gap: 16px; justify-content: center; }
+    .confirm-btns button {
+      padding: 11px 34px; border-radius: 10px;
+      font-size: 15px; font-weight: 700; letter-spacing: 1px;
+      cursor: pointer; border: 2px solid;
+      background: transparent; transition: all .15s; pointer-events: all;
+      font-family: monospace;
+    }
+    #btnConfirmSim { color: #e94560; border-color: #e94560; }
+    #btnConfirmSim:hover, #btnConfirmSim.focused { background: #e94560; color: #fff; }
+    #btnConfirmNao { color: #4caf50; border-color: #4caf50; }
+    #btnConfirmNao:hover, #btnConfirmNao.focused { background: #4caf50; color: #fff; }
+
     /* ── Notificação Offline ── */
     #notifOffline {
       display: none; position: absolute;
@@ -415,6 +463,9 @@
 
     <!-- Botão de configurações: canto superior esquerdo, só visível no menu principal -->
     <button id="btnConfig" onclick="abrirConfig()">⚙</button>
+
+    <!-- Botão de fechar jogo: canto superior direito, só visível no menu principal -->
+    <button id="btnFechar" onclick="fecharJogo()">✕ FECHAR</button>
 
     <!-- Botões da tela inicial -->
     <div id="botoesInicio">
@@ -535,6 +586,19 @@
       <button id="btnJogarSemLogin" onclick="jogarSemLogin()">▶ Jogar sem Login</button>
     </div>
 
+    <!-- Modal de confirmação de abandono (só online) -->
+    <div id="confirmSaida">
+      <div class="confirm-box">
+        <h3>⚠ Abandonar a partida?</h3>
+        <p>Sair agora resultará na <strong>perda dos resultados</strong><br>
+           no placar online.<br>Tem certeza que deseja abandonar?</p>
+        <div class="confirm-btns">
+          <button id="btnConfirmSim" onclick="_confirmarSaida()">Sim, sair</button>
+          <button id="btnConfirmNao" onclick="_cancelarSaida()">Não, continuar</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Notificação offline (aguarda escolha do jogador, sem timer) -->
     <div id="notifOffline">
       <h3>⚠ Sem internet</h3>
@@ -614,7 +678,7 @@
         const saved = parseFloat(localStorage.getItem('arcade_volume'));
         this._volume = isNaN(saved) ? 0.35 : Math.max(0, Math.min(1, saved));
 
-        const base = '../sprites/sound/';
+        const base = '../sound/';
         const files = { menu: 'menuInicial.mp3', luta: 'luta.mp3', fim: 'fimDoJogo.mp3' };
         for (const [key, file] of Object.entries(files)) {
           const a    = new Audio(base + file);
@@ -685,6 +749,7 @@
     // _shortcutPrev:   estado anterior dos botões L2/R2 no loop de atalhos globais
     let _modo    = null;
     let _salaId  = null;
+    let _pendenteSaida = false; // true enquanto modal de confirmação de saída está aberta
     let _tokenP1 = null;
     let _tokenP2 = null;
     let _nickP1  = null;
@@ -763,6 +828,7 @@
         el.classList.add('hidden');
         el.classList.remove('visible');
         document.getElementById('btnConfig').classList.remove('visible');
+        document.getElementById('btnFechar').classList.remove('visible');
         esconder('painelDificuldade');
         esconder('painelQR');
         esconder('painelConfig');
@@ -806,6 +872,7 @@
       el.classList.remove('hidden');
       el.classList.add('visible');
       document.getElementById('btnConfig').classList.add('visible');
+      document.getElementById('btnFechar').classList.add('visible');
       esconder('painelQR');
       esconder('painelDificuldade');
       esconderMsg();
@@ -1213,7 +1280,27 @@
         return;
       }
 
-      // Telas fora do config: flat
+      // Tela inicial: grade 2×2 (Config|Fechar / Single|Multi)
+      if (_telaAtual === 'inicial') {
+        const COLS = 2;
+        const rows = Math.ceil(els.length / COLS);
+        const row  = Math.floor(_focusIdx / COLS);
+        const col  = _focusIdx % COLS;
+        if (horizontal) {
+          // Esq/Dir alterna coluna (Config↔Fechar, Single↔Multi)
+          const newCol = (col + dir + COLS) % COLS;
+          const newIdx = row * COLS + newCol;
+          if (newIdx < els.length) _focusIdx = newIdx;
+        } else {
+          // Cima/Baixo move entre linhas (Config/Fechar ↔ Single/Multi)
+          const newRow = (row + dir + rows) % rows;
+          _focusIdx    = Math.min(newRow * COLS + col, els.length - 1);
+        }
+        atualizarFoco();
+        return;
+      }
+
+      // Demais telas fora do config: flat
       _focusIdx = (_focusIdx + dir + els.length) % els.length;
       atualizarFoco();
     }
@@ -1345,24 +1432,14 @@
     //   Game.voltarInicio() é chamado para que game.js retorne ao estado TELA_INICIAL
     //   e dispare o CustomEvent game:telaInicial, restaurando a UI.
     //   O usuário então escolhe o modo manualmente — sem disparo automático de clicarSingle/Multi.
-    function _ativarModoViaBotao(modo) {
-      const estado = Game.getState ? Game.getState() : '';
-      const naInicial = (estado === 'TELA_INICIAL' || estado === '');
-
-      if (naInicial) {
-        // Fora de partida: atalho direto para o modo
-        Controls.resetInput();
-        if (modo === 'single') clicarSingle(); else clicarMulti();
-        return;
-      }
-
-      // Durante partida (FIGHTING, SELECT, COUNTDOWN, ROUND_END, GAME_OVER):
-      // encerra tudo e volta ao menu — o usuário escolhe o modo manualmente
+    // Executa a saída efetiva da partida (limpeza completa → menu inicial).
+    function _executarSaida() {
       _stopPolling();
       if (_salaId) {
         try { Api.cancelarSala(_salaId); } catch(e) {}
         _salaId = null; _tokenP1 = null; _tokenP2 = null; _nickP1 = null; _nickP2 = null;
       }
+      if (Game.retomar) Game.retomar();
       Game.voltarInicio();
       esconderQrPlacar();
       esconder('painelQR');
@@ -1372,6 +1449,56 @@
       document.getElementById('btnVoltar').classList.remove('visible');
       Controls.resetInput();
       mostrarBotoesInicio();
+    }
+
+    // Exibe o modal de confirmação de abandono (só durante partida online).
+    function _mostrarConfirmacaoSaida() {
+      _pendenteSaida = true;
+      document.getElementById('confirmSaida').classList.add('visible');
+      if (Game.pausar) Game.pausar();
+      _telaAtual = 'confirmSaida';
+      _focusIdx  = 1; // padrão: "Não, continuar" (mais seguro)
+      atualizarFoco();
+      _iniciarPollGamepadMenu();
+    }
+
+    // Jogador confirmou saída.
+    function _confirmarSaida() {
+      document.getElementById('confirmSaida').classList.remove('visible');
+      _pararPollGamepadMenu();
+      _pendenteSaida = false;
+      _executarSaida();
+    }
+
+    // Jogador cancelou — volta ao jogo.
+    function _cancelarSaida() {
+      document.getElementById('confirmSaida').classList.remove('visible');
+      _pararPollGamepadMenu();
+      _pendenteSaida = false;
+      if (Game.retomar) Game.retomar();
+      _telaAtual = 'jogando';
+    }
+
+    function _ativarModoViaBotao(modo) {
+      const estado    = Game.getState ? Game.getState() : '';
+      const naInicial = (estado === 'TELA_INICIAL' || estado === '');
+
+      if (naInicial) {
+        Controls.resetInput();
+        if (modo === 'single') clicarSingle(); else clicarMulti();
+        return;
+      }
+
+      // Durante partida ativa E online: pedir confirmação antes de sair
+      const partidaAtiva = (estado === 'FIGHTING' || estado === 'COUNTDOWN' ||
+                            estado === 'ROUND_END' || estado === 'SELECT');
+      if (!_modoOffline && partidaAtiva) {
+        _mostrarConfirmacaoSaida();
+        return;
+      }
+
+      // Offline ou GAME_OVER: sair direto, sem confirmação
+      _executarSaida();
     }
 
     // ── Modo Offline ──────────────────────────────────────
@@ -1398,12 +1525,18 @@
     }
 
     // Reinicia o processo Electron via IPC.
-    // Chamada pelo onclick de #notifBtnReiniciar quando o usuário quer tentar reconectar.
-    // ipcRenderer.send('restart-app') → main.js recebe e chama app.relaunch() + app.quit().
     function reiniciarApp() {
       _pararPollGamepadMenu();
       const { ipcRenderer } = require('electron');
       ipcRenderer.send('restart-app');
+    }
+
+    // Fecha o jogo completamente via IPC.
+    // main.js recebe 'close-app' → app.quit() encerra Electron.
+    // start.bat continua: mata o backend e fecha o próprio CMD.
+    function fecharJogo() {
+      const { ipcRenderer } = require('electron');
+      ipcRenderer.send('close-app');
     }
 
     // ── Navegação por teclado no menu ─────────────────────
@@ -1469,6 +1602,12 @@
           document.getElementById('notifBtnContinuar')
         ];
       }
+      if (document.getElementById('confirmSaida').classList.contains('visible')) {
+        return [
+          document.getElementById('btnConfirmSim'),
+          document.getElementById('btnConfirmNao')
+        ].filter(Boolean);
+      }
       if (document.getElementById('qrPlacarOverlay').classList.contains('visible')) {
         return [document.getElementById('btnPularPlacar')];
       }
@@ -1490,10 +1629,12 @@
         return [...tabBtns, ...modoBtns, ...linhas, ...volEl, ...rodape];
       }
       if (_telaAtual === 'inicial') {
+        // Grade 2×2: linha 0 = [Config, Fechar] | linha 1 = [Single, Multi]
         return [
-          document.getElementById('btnSingle'),
-          document.getElementById('btnMulti'),
-          document.getElementById('btnConfig')
+          document.getElementById('btnConfig'),   // linha 0, col 0 (topo-esq)
+          document.getElementById('btnFechar'),   // linha 0, col 1 (topo-dir)
+          document.getElementById('btnSingle'),   // linha 1, col 0 (baixo-esq)
+          document.getElementById('btnMulti')    // linha 1, col 1 (baixo-dir)
         ].filter(Boolean);
       }
       if (_telaAtual === 'dificuldade') {
@@ -1547,6 +1688,7 @@
       el.classList.add('hidden');
       el.classList.remove('visible');
       document.getElementById('btnConfig').classList.remove('visible');
+      document.getElementById('btnFechar').classList.remove('visible');
       mostrar('painelConfig');
       _telaAtual = 'config';
       _cancelarRemap();

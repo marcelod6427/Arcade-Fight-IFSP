@@ -38,6 +38,12 @@ ipcMain.on('restart-app', () => {
   app.exit(0);
 });
 
+// Fecha o jogo completamente (botão "Fechar Jogo").
+// app.quit() encerra o Electron; start.bat continua, mata o backend e fecha o CMD.
+ipcMain.on('close-app', () => {
+  app.quit();
+});
+
 app.whenReady().then(() => {
   createWindow();
 

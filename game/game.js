@@ -35,13 +35,24 @@ const SPRITES_PATH = (() => {
   }
 })();
 
+// Caminho da pasta de efeitos sonoros (mesmo nível que sprites/).
+const SFX_PATH = (() => {
+  try {
+    const path = require('path');
+    return path.join(__dirname, '..', 'sound');
+  } catch (e) {
+    return '../sound';
+  }
+})();
+
 // ── Estado global do jogo ─────────────────────────────────────────────────────
 let canvas, ctx;
 let spriteManager; // instância de SpriteManager (sprites.js)
 
 // Máquina de estados principal:
 // LOADING → TELA_INICIAL → SELECT → COUNTDOWN → FIGHTING → ROUND_END → GAME_OVER
-let gameState = 'LOADING';
+let gameState   = 'LOADING';
+let gamePausado = false; // true enquanto modal de confirmação de saída está aberta
 
 // Dados da sala online (null em modo offline)
 let salaId      = null;  // ID da sala no backend
@@ -73,6 +84,79 @@ let roundEndTimer  = 0;
 let selecao = {
   cursor:   [0, 1],         // índice do personagem sob o cursor de cada player
   escolhido: [null, null]   // índice do personagem confirmado (null = ainda escolhendo)
+};
+
+// =============================================================================
+// Sistema de efeitos sonoros dos personagens (SFX)
+// Independente da trilha sonora principal — sons tocam em canais separados.
+// =============================================================================
+
+// Tenta carregar um áudio testando .mp3 e depois .wav.
+// Retorna um HTMLAudioElement pronto ou null se ambas as extensões falharem.
+function _tryLoadSound(basePath, name) {
+  return new Promise(resolve => {
+    const exts = ['.mp3', '.wav'];
+    let idx = 0;
+    const tryNext = () => {
+      if (idx >= exts.length) { resolve(null); return; }
+      const ext = exts[idx++];
+      let fullPath = basePath + '/' + name + ext;
+      try { fullPath = require('path').join(basePath, name + ext); } catch {}
+      const audio = new Audio(fullPath);
+      let done = false;
+      const ok  = () => { if (!done) { done = true; resolve(audio); } };
+      const err = () => { if (!done) { done = true; tryNext(); } };
+      audio.addEventListener('canplay', ok,  { once: true });
+      audio.addEventListener('error',   err, { once: true });
+      setTimeout(err, 3000); // timeout de segurança por extensão
+      audio.load();
+    };
+    tryNext();
+  });
+}
+
+const SFXManager = {
+  _sons:  {},   // { personagemIdx: { attack1, attack2, especial, hurt, death } }
+  _nomes: ['Espadachim', 'Lutador', 'Mago', 'Vampira', 'Vampiro'],
+
+  // Carrega todos os sons dos 5 personagens em paralelo.
+  // Estrutura: sound/NomePersonagem/tipoNomePersonagem.(mp3|wav)
+  // Testa .mp3 primeiro, depois .wav para cada arquivo.
+  async init(basePath) {
+    const tipos = ['attack1', 'attack2', 'especial', 'hurt', 'death'];
+    const proms = [];
+    for (let i = 0; i < this._nomes.length; i++) {
+      this._sons[i] = {};
+      const nomePersonagem = this._nomes[i];
+      // Subpasta do personagem: sound/Espadachim/, sound/Lutador/, etc.
+      let subPath = basePath + '/' + nomePersonagem;
+      try { subPath = require('path').join(basePath, nomePersonagem); } catch {}
+
+      for (const tipo of tipos) {
+        const nomeArquivo = tipo + nomePersonagem; // ex: attack1Espadachim
+        proms.push(
+          _tryLoadSound(subPath, nomeArquivo).then(audio => {
+            this._sons[i][tipo] = audio;
+            if (audio) console.log(`[SFX] ${nomePersonagem}/${nomeArquivo} carregado`);
+            else        console.warn(`[SFX] ${nomePersonagem}/${nomeArquivo} não encontrado (.mp3/.wav)`);
+          })
+        );
+      }
+    }
+    await Promise.allSettled(proms);
+    console.log('[SFX] Inicialização concluída.');
+  },
+
+  // Toca um efeito sonoro do personagem.
+  // Só executa durante FIGHTING. Usa cloneNode para permitir sobreposição.
+  play(personagemIdx, tipo) {
+    if (gameState !== 'FIGHTING') return;
+    const som = this._sons[personagemIdx]?.[tipo];
+    if (!som) return;
+    const clone = som.cloneNode(false);
+    clone.volume = 0.7;
+    clone.play().catch(() => {});
+  }
 };
 
 // =============================================================================
@@ -285,13 +369,18 @@ class Fighter {
     this.hitboxAtiva = true;
     this.state       = tipo;
     this._danoAtual  = dano;
-    spriteManager.setAnim(this.animState, tipo); // sprites.js — ANIM_MAP[tipo].pasta
+    spriteManager.setAnim(this.animState, tipo);
+    // Efeito sonoro: attack1 para ATTACK, attack2 para ATTACK2.
+    // SPECIAL é tratado em _ativarEspecial (evita dupla execução).
+    if (tipo === 'ATTACK')  SFXManager.play(this.personagem, 'attack1');
+    if (tipo === 'ATTACK2') SFXManager.play(this.personagem, 'attack2');
   }
 
   // Ativa o especial do personagem. Cada personagem tem comportamento único.
   // Zera especialCharge antes de executar.
   _ativarEspecial(inimigo) {
     this.especialCharge = 0;
+    SFXManager.play(this.personagem, 'especial'); // toca antes do switch para todos os personagens
 
     switch (this.personagem) {
       case 0: // Espadachim — Lâmina Veloz: investida com corte em área
@@ -367,13 +456,16 @@ class Fighter {
     const dmgReal = this.bloqueando ? Math.ceil(dano * 0.3) : dano;
 
     this.hp = Math.max(0, this.hp - dmgReal);
-    // Stun menor ao bloquear (80ms) vs receber dano direto (200ms)
     this.stunTimer = this.bloqueando ? 80 : 200;
     spriteManager.setAnim(this.animState, 'HIT');
 
     if (this.hp <= 0) {
       this.morreu = true;
       spriteManager.setAnim(this.animState, 'DEATH');
+      SFXManager.play(this.personagem, 'death');
+    } else if (!this.bloqueando) {
+      // Hurt só toca sem bloqueio (bloquear absorve sem som de dano)
+      SFXManager.play(this.personagem, 'hurt');
     }
 
     if (atacante) {
@@ -500,10 +592,12 @@ async function init() {
     catch { return SPRITES_PATH + '/imgFundoArcadeFight.png'; }
   })();
 
-  // Carrega todas as animações de todos os personagens a partir de SPRITES_PATH
-  // sprites/{personagem}/{animacao}/0.png, 1.png, ...
-  spriteManager = new SpriteManager(SPRITES_PATH); // sprites.js
-  await spriteManager.carregar();
+  // Carrega sprites e efeitos sonoros em paralelo para reduzir tempo de boot.
+  spriteManager = new SpriteManager(SPRITES_PATH);
+  await Promise.all([
+    spriteManager.carregar(),
+    SFXManager.init(SFX_PATH)
+  ]);
 
   gameState = 'TELA_INICIAL';
   requestAnimationFrame(loop);
@@ -521,8 +615,8 @@ function loop(ts) {
   const delta = Math.min(ts - lastTime, 50);
   lastTime = ts;
 
-  Controls.update(); // lê teclado e gamepad, salva estado anterior
-  update(delta);
+  Controls.update();
+  if (!gamePausado) update(delta); // congela a lógica enquanto modal de saída está aberta
   render();
 
   requestAnimationFrame(loop);
@@ -803,6 +897,20 @@ function _drawGame() {
   });
 
   if (gameState === 'COUNTDOWN') _drawCountdown();
+
+  // Dica de saída: visível durante combate, abaixo do piso, semi-transparente
+  if (gameState !== 'GAME_OVER') {
+    ctx.save();
+    ctx.globalAlpha = 0.28;
+    ctx.fillStyle   = '#fff';
+    ctx.font        = 'bold 11px monospace';
+    ctx.textAlign   = 'center';
+    ctx.fillText(
+      'Para sair da partida, clique no botão de SinglePlayer ou MultiPlayer',
+      W / 2, CHAO + 16
+    );
+    ctx.restore();
+  }
 }
 
 // HUD: barras de HP, contadores de round e barras de carga especial de ambos os jogadores.
@@ -1215,10 +1323,12 @@ document.addEventListener('game:telaInicial', () => {
 // API pública exposta ao index.html via window.Game
 // =============================================================================
 window.Game = {
-  init,                           // inicializa canvas, carrega sprites, inicia loop
-  iniciarFluxo,                   // inicia fluxo de nova partida (SELECT)
-  jogadoresEntraramprontos,       // define nicks dos jogadores
-  setDificuldade,                 // define dificuldade da IA ('facil'|'medio'|'dificil')
-  getState:     () => gameState,  // retorna o estado atual (usado por index.html para L2/R2)
-  voltarInicio: _voltarInicio     // força retorno ao menu (usado por index.html via L2/R2)
+  init,
+  iniciarFluxo,
+  jogadoresEntraramprontos,
+  setDificuldade,
+  getState:     () => gameState,
+  voltarInicio: _voltarInicio,
+  pausar:  () => { gamePausado = true;  },  // congela update() durante modal de saída
+  retomar: () => { gamePausado = false; },  // retoma update() ao fechar modal
 };
