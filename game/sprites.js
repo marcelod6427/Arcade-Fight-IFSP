@@ -54,7 +54,7 @@ const PERSONAGENS_DEF = [
     especial: 'Lâmina Veloz',
     descEspecial: 'Investida rápida com corte em área',
     velocidade: 4.5,
-    dano: { leve: 12, forte: 22, especial: 30 },
+    dano: { leve: 7, forte: 17, especial: 25 },
     alcance: { normal: 130, especial: 155 }
   },
   {
@@ -79,7 +79,7 @@ const PERSONAGENS_DEF = [
     descEspecial: 'Conjura três projéteis mágicos',
     velocidade: 4.0,
     dano: { leve: 8, forte: 15, especial: 22 },
-    alcance: { normal: 160, especial: 180 }
+    alcance: { normal: 240, especial: 270 }
   },
   {
     id: 3,
@@ -91,7 +91,7 @@ const PERSONAGENS_DEF = [
     descEspecial: 'Manto sombrio concede invencibilidade por 2s',
     velocidade: 4.2,
     dano: { leve: 8, forte: 16, especial: 0 }, // especial = invencibilidade, sem dano direto
-    alcance: { normal: 160, especial: 180 }
+    alcance: { normal: 240, especial: 270 }
   },
   {
     id: 4,

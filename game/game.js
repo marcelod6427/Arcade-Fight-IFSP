@@ -62,6 +62,7 @@ let dificuldadeIA = 'medio'; // 'facil' | 'medio' | 'dificil'
 
 let fighters  = []; // [Fighter P1, Fighter P2]
 let projeteis = []; // projéteis ativos (especial do Mago)
+let bgImage   = null; // imagem de fundo das partidas (carregada em init)
 
 // Timers de transição entre estados
 let countdownVal   = 5;
@@ -492,6 +493,13 @@ async function init() {
   // Inicializa o sistema de controles (teclado + gamepad)
   Controls.init(); // controls.js
 
+  // Carrega imagem de fundo para as partidas (não bloqueia se não encontrar)
+  bgImage = new Image();
+  bgImage.src = (() => {
+    try { return require('path').join(SPRITES_PATH, 'imgFundoArcadeFight.png'); }
+    catch { return SPRITES_PATH + '/imgFundoArcadeFight.png'; }
+  })();
+
   // Carrega todas as animações de todos os personagens a partir de SPRITES_PATH
   // sprites/{personagem}/{animacao}/0.png, 1.png, ...
   spriteManager = new SpriteManager(SPRITES_PATH); // sprites.js
@@ -730,17 +738,24 @@ function render() {
   }
 }
 
-// Fundo gradiente escuro. Adiciona piso e linha vermelha durante o combate.
+// Fundo: imagem de arena durante combate; gradiente escuro nos menus.
+// Sempre sobrepõe piso semi-transparente + linha vermelha no combate.
 function _drawBg() {
-  const grad = ctx.createLinearGradient(0, 0, 0, H);
-  grad.addColorStop(0, '#0f0f1a');
-  grad.addColorStop(1, '#1a0a0a');
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, W, H);
+  const combate = gameState === 'COUNTDOWN' || gameState === 'FIGHTING' ||
+                  gameState === 'ROUND_END'  || gameState === 'GAME_OVER';
 
-  if (gameState === 'COUNTDOWN' || gameState === 'FIGHTING' ||
-      gameState === 'ROUND_END' || gameState === 'GAME_OVER') {
-    ctx.fillStyle = '#2a1a1a';
+  if (combate && bgImage && bgImage.complete && bgImage.naturalWidth > 0) {
+    ctx.drawImage(bgImage, 0, 0, W, H);
+  } else {
+    const grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, '#0f0f1a');
+    grad.addColorStop(1, '#1a0a0a');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  if (combate) {
+    ctx.fillStyle = 'rgba(42,26,26,0.65)';
     ctx.fillRect(0, CHAO, W, H - CHAO);
     ctx.strokeStyle = '#e94560';
     ctx.lineWidth = 2;

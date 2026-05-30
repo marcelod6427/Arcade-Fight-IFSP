@@ -200,6 +200,152 @@
       pointer-events: none;
     }
 
+    /* ── Botão Config (canto superior esquerdo, visível só no menu) ── */
+    #btnConfig {
+      position: absolute; top: 15px; left: 15px;
+      display: none;
+      padding: 9px 14px; border-radius: 10px;
+      font-size: 18px; cursor: pointer;
+      border: 2px solid #3a3a4a;
+      background: rgba(15,15,26,0.85);
+      color: #666; transition: all .15s; pointer-events: all;
+      z-index: 5;
+    }
+    #btnConfig.visible { display: block; }
+    #btnConfig:hover, #btnConfig.focused { border-color: #e94560; color: #e94560; }
+
+    /* ── Painel de configurações (com abas) ── */
+    #painelConfig {
+      display: none;
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(15,15,26,0.98);
+      border: 2px solid #e94560; border-radius: 18px;
+      text-align: center; pointer-events: all;
+      min-width: 530px; max-width: 590px;
+      z-index: 100; overflow: hidden;
+    }
+
+    .config-tabs {
+      display: flex; border-bottom: 1px solid #1a1a2e;
+      background: rgba(0,0,0,0.3);
+    }
+    .config-tab-btn {
+      flex: 1; padding: 11px 6px;
+      font-size: 11px; font-weight: 700; letter-spacing: 1px;
+      cursor: pointer; border: none; background: transparent;
+      color: #555; transition: all .15s; pointer-events: all;
+      font-family: monospace; border-bottom: 3px solid transparent;
+    }
+    .config-tab-btn:hover { color: #aaa; }
+    .config-tab-btn.active { color: #e94560; border-bottom-color: #e94560; }
+
+    .config-tab-content { padding: 12px 22px 0; }
+
+    .config-headers {
+      display: flex; gap: 8px; margin-bottom: 6px;
+    }
+    .config-col-header {
+      flex: 1; font-size: 10px; font-weight: 900; letter-spacing: 2px;
+      padding-bottom: 4px; text-align: center; border-bottom: 2px solid;
+    }
+    .config-col-header.player1 { color: #e94560; border-color: #e94560; }
+    .config-col-header.player2 { color: #4fc3f7; border-color: #4fc3f7; }
+
+    .config-pair { display: flex; gap: 6px; margin-bottom: 4px; }
+    .config-pair .config-linha { flex: 1; }
+
+    .config-sep-h { height: 1px; background: #252535; margin: 6px 0; }
+
+    .config-linha {
+      display: flex; align-items: center; gap: 6px;
+      padding: 6px 8px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid #252535; border-radius: 7px;
+      cursor: pointer; transition: all .15s;
+      color: #fff; font-family: monospace; font-size: 11px;
+    }
+    .config-linha:hover, .config-linha.focused {
+      border-color: #555; background: rgba(255,255,255,0.07);
+    }
+    .config-linha.aguardando {
+      border-color: #ffd700; background: rgba(255,215,0,0.06);
+      animation: pulseConfig 0.7s infinite alternate;
+    }
+    @keyframes pulseConfig { from { opacity: 0.65; } to { opacity: 1.0; } }
+
+    .config-emoji  { font-size: 13px; width: 18px; flex-shrink: 0; }
+    .config-label  { flex: 1; text-align: left; font-weight: 700; }
+    .config-btn-idx {
+      font-size: 10px; font-weight: 900; color: #ffd700;
+      background: rgba(255,215,0,0.1); padding: 1px 5px;
+      border-radius: 3px; min-width: 40px; text-align: center; flex-shrink: 0;
+    }
+    .config-hint { font-size: 10px; color: #3a3a4a; margin: 5px 0 8px; }
+    .config-linha.disabled { opacity: 0.35; cursor: default; pointer-events: none; }
+
+    .config-bottom {
+      display: flex; gap: 10px; justify-content: center;
+      padding: 12px 22px 16px; border-top: 1px solid #1a1a2e;
+    }
+    .config-bottom button {
+      padding: 7px 20px; border-radius: 7px;
+      font-size: 12px; font-weight: 700; letter-spacing: 1px;
+      cursor: pointer; border: 2px solid;
+      background: transparent; transition: all .15s; pointer-events: all;
+      font-family: monospace;
+    }
+    #btnConfigPadrao { color: #ff9800; border-color: #ff9800; }
+    #btnConfigPadrao:hover, #btnConfigPadrao.focused { background: #ff9800; color: #fff; }
+    #btnConfigFechar { color: #aaa; border-color: #aaa; }
+    #btnConfigFechar:hover, #btnConfigFechar.focused { background: #aaa; color: #000; }
+
+    /* Toggle Gamepad / Teclado */
+    .config-modo-toggle { display: flex; gap: 6px; margin-bottom: 10px; }
+    .modo-btn {
+      flex: 1; padding: 5px 8px; border-radius: 6px; border: 1px solid #333;
+      background: transparent; color: #555; font-size: 11px; font-weight: 700;
+      cursor: pointer; transition: all .15s; pointer-events: all; font-family: monospace;
+    }
+    .modo-btn.active { border-color: #e94560; color: #e94560; background: rgba(233,69,96,0.08); }
+    .modo-btn:hover  { color: #aaa; border-color: #555; }
+
+    /* Controle de volume */
+    .som-config { padding: 14px 0 8px; }
+    .som-item { margin-bottom: 18px; }
+    .som-label { display: block; color: #aaa; font-size: 12px; font-weight: 700;
+                 margin-bottom: 8px; font-family: monospace; letter-spacing: 1px; }
+    #volControl {
+      border: 1px solid #252535; border-radius: 8px; padding: 8px 10px;
+      cursor: pointer; transition: border-color .15s; outline: none;
+    }
+    #volControl.focused, #volControl:hover { border-color: #e94560; }
+    .som-slider-row { display: flex; align-items: center; gap: 12px; }
+    .som-slider-row input[type="range"] { flex: 1; accent-color: #e94560; cursor: pointer; }
+    .som-slider-row span { color: #ffd700; font-size: 14px; font-weight: 900;
+                           font-family: monospace; min-width: 38px; text-align: right; }
+    .som-hint { font-size: 10px; color: #3a3a4a; margin-top: 5px; }
+
+    .config-creditos {
+      text-align: left; max-height: 270px;
+      overflow-y: scroll;
+      scrollbar-width: none;      /* Firefox */
+      -ms-overflow-style: none;   /* IE / Edge */
+      padding-bottom: 4px;
+    }
+    .config-creditos::-webkit-scrollbar { display: none; } /* Chrome / Electron */
+    .config-creditos section { margin-bottom: 12px; }
+    .config-creditos .cred-titulo {
+      font-size: 9px; font-weight: 900; letter-spacing: 2px;
+      color: #ffd700; text-transform: uppercase;
+      margin-bottom: 4px; padding-bottom: 3px; border-bottom: 1px solid #252535;
+    }
+    .config-creditos p, .config-creditos li { color: #777; font-size: 11px; line-height: 1.7; }
+    .config-creditos a { color: #4fc3f7; }
+    .config-creditos ul { list-style: none; padding: 0; }
+    .config-creditos ul li::before { content: '▸ '; color: #e94560; }
+    .config-creditos strong { color: #e94560; }
+
     /* ── Notificação Offline ── */
     #notifOffline {
       display: none; position: absolute;
@@ -267,10 +413,100 @@
       <button id="btnPularPlacar" onclick="voltarMenuPosPlacar()">◄ VOLTAR AO MENU</button>
     </div>
 
+    <!-- Botão de configurações: canto superior esquerdo, só visível no menu principal -->
+    <button id="btnConfig" onclick="abrirConfig()">⚙</button>
+
     <!-- Botões da tela inicial -->
     <div id="botoesInicio">
       <button id="btnSingle" onclick="clicarSingle()">⚔ SINGLE PLAYER</button>
       <button id="btnMulti"  onclick="clicarMulti()">⚔ MULTI PLAYER</button>
+    </div>
+
+    <!-- Painel de configurações (abas: Controles / Som / Créditos) -->
+    <div id="painelConfig">
+      <div class="config-tabs">
+        <button class="config-tab-btn active" data-tab="controles" onclick="_mudarTab('controles')">🎮 CONTROLES</button>
+        <button class="config-tab-btn"        data-tab="som"       onclick="_mudarTab('som')">🔊 SOM</button>
+        <button class="config-tab-btn"        data-tab="creditos"  onclick="_mudarTab('creditos')">ℹ CRÉDITOS</button>
+      </div>
+
+      <div id="tabControles" class="config-tab-content">
+        <div class="config-modo-toggle">
+          <button class="modo-btn active" data-modo="gamepad"   onclick="_setInputMode('gamepad')">🎮 Gamepad</button>
+          <button class="modo-btn"        data-modo="keyboard"  onclick="_setInputMode('keyboard')">⌨ Teclado / Mouse</button>
+        </div>
+        <div class="config-headers">
+          <div class="config-col-header player1">PLAYER 1</div>
+          <div class="config-col-header player2">PLAYER 2</div>
+        </div>
+        <div id="configGrid"></div>
+        <p class="config-hint" id="configHint">Clique num botão e pressione o físico no gamepad para remapear</p>
+      </div>
+
+      <div id="tabSom" class="config-tab-content" style="display:none">
+        <div class="som-config">
+          <div class="som-item" id="volControl" tabindex="-1">
+            <span class="som-label">🎵 Volume das Músicas</span>
+            <div class="som-slider-row">
+              <input type="range" id="sliderVolume" min="0" max="100" value="35"
+                     oninput="_atualizarVolume(this.value)">
+              <span id="lblVolume">35%</span>
+            </div>
+            <p class="som-hint">◄ ► para ajustar  |  ⟲ PADRÃO = 35%</p>
+          </div>
+        </div>
+      </div>
+
+      <div id="tabCreditos" class="config-tab-content" style="display:none">
+        <div class="config-creditos" id="scrollCreditos">
+          <section>
+            <div class="cred-titulo">Sobre o Jogo</div>
+            <p>Arcade Fight é um jogo de luta 2D estilo arcade clássico com 5 personagens únicos, sistema de rounds Best-of-3, placar online e suporte a 2 jogadores simultâneos via controles arcade físicos.</p>
+          </section>
+          <section>
+            <div class="cred-titulo">Repositório</div>
+            <ul><li>github.com/marcelod6427/Arcade-Fight-IFSP</li></ul>
+          </section>
+          <section>
+            <div class="cred-titulo">Ferramentas de IA</div>
+            <ul>
+              <li><strong>Claude AI (Anthropic)</strong> — geração, revisão e refatoração de código</li>
+              <li><strong>Suno AI</strong> — composição das trilhas sonoras do jogo</li>
+              <li><strong>ChatGPT (OpenAI)</strong> — geração de imagens e pesquisa de conteúdo</li>
+            </ul>
+          </section>
+          <section>
+            <div class="cred-titulo">Recursos de Áudio</div>
+            <ul>
+              <li><strong>Pixabay</strong> — sons dos sprites e efeitos sonoros</li>
+              <li><strong>Suno AI</strong> — trilhas sonoras (menu, luta, fim de jogo)</li>
+            </ul>
+          </section>
+          <section>
+            <div class="cred-titulo">Referências &amp; Aprendizado</div>
+            <ul>
+              <li>CursoemVideo — lógica de programação e JavaScript</li>
+              <li>Alura — desenvolvimento web e boas práticas</li>
+              <li>MDN Web Docs — Canvas API, Web Gamepad API</li>
+              <li>Electron.js Docs — empacotamento desktop</li>
+            </ul>
+          </section>
+          <section>
+            <div class="cred-titulo">Tecnologias Utilizadas</div>
+            <ul>
+              <li>Frontend: HTML5 Canvas · CSS3 · JavaScript</li>
+              <li>Backend: Python FastAPI · PostgreSQL</li>
+              <li>Desktop: Electron.js · Node.js</li>
+              <li>Controles: Web Gamepad API · x360ce</li>
+            </ul>
+          </section>
+        </div>
+      </div>
+
+      <div class="config-bottom">
+        <button id="btnConfigPadrao" onclick="_resetarSubMenuAtual()">⟲ PADRÃO</button>
+        <button id="btnConfigFechar" onclick="fecharConfig()">✕ FECHAR</button>
+      </div>
     </div>
 
     <!-- Painel de dificuldade -->
@@ -364,6 +600,76 @@
     //   Controls.resetInput()   — ao iniciar fluxo e ao voltar ao menu pelo gamepad
     // =============================================================================
 
+    // ── Sistema de som ────────────────────────────────────
+    // Três faixas: menu, luta, fim. Crossfade suave (1.5s) entre elas.
+    // Volume padrão 35%. Pausa/retoma com transição limpa.
+    const SoundManager = {
+      _tracks: {},
+      _volume: 0.35,
+      _currentKey: null,
+      _fadeId: null,
+
+      init() {
+        // Carrega volume salvo (localStorage) ou usa padrão 35%
+        const saved = parseFloat(localStorage.getItem('arcade_volume'));
+        this._volume = isNaN(saved) ? 0.35 : Math.max(0, Math.min(1, saved));
+
+        const base = '../sprites/sound/';
+        const files = { menu: 'menuInicial.mp3', luta: 'luta.mp3', fim: 'fimDoJogo.mp3' };
+        for (const [key, file] of Object.entries(files)) {
+          const a    = new Audio(base + file);
+          a.loop     = true;
+          a.volume   = 0;
+          this._tracks[key] = a;
+        }
+      },
+
+      play(key) {
+        if (this._currentKey === key) return;
+        if (this._fadeId) { clearInterval(this._fadeId); this._fadeId = null; }
+
+        const oldAudio = this._currentKey ? this._tracks[this._currentKey] : null;
+        const newAudio = this._tracks[key];
+        if (!newAudio) return;
+
+        const STEPS    = 20;
+        const INTERVAL = 75; // 20 × 75ms = 1.5s crossfade
+        this._currentKey = key;
+
+        newAudio.volume = 0;
+        newAudio.play().catch(() => {});
+
+        let step = 0;
+        this._fadeId = setInterval(() => {
+          step++;
+          const t = step / STEPS;
+          if (oldAudio) oldAudio.volume = Math.max(0, this._volume * (1 - t));
+          newAudio.volume               = Math.min(this._volume, this._volume * t);
+          if (step >= STEPS) {
+            clearInterval(this._fadeId); this._fadeId = null;
+            if (oldAudio) { oldAudio.pause(); oldAudio.currentTime = 0; oldAudio.volume = 0; }
+            newAudio.volume = this._volume;
+          }
+        }, INTERVAL);
+      },
+
+      stop() {
+        if (this._fadeId) { clearInterval(this._fadeId); this._fadeId = null; }
+        for (const a of Object.values(this._tracks)) { a.pause(); a.currentTime = 0; a.volume = 0; }
+        this._currentKey = null;
+      },
+
+      setVolume(v) {
+        this._volume = Math.max(0, Math.min(1, v));
+        localStorage.setItem('arcade_volume', this._volume);
+        if (this._currentKey && this._tracks[this._currentKey]) {
+          this._tracks[this._currentKey].volume = this._volume;
+        }
+      },
+
+      getVolume() { return this._volume; }
+    };
+
     // ── Estado local da UI ────────────────────────────────
     // _modo:           'single' | 'multi' — modo escolhido nesta sessão
     // _salaId:         ID da sala criada no backend (null se offline ou sem sala)
@@ -447,39 +753,39 @@
       if (!online) mostrarNotifOffline();
 
       await Game.init();
+      SoundManager.init();
       mostrarBotoesInicio();
+      SoundManager.play('menu');
       _iniciarShortcutsGamepad();
 
-      // game:selectIniciado → disparado por game.js ao entrar na tela SELECT.
-      // Oculta todos os overlays de menu e para o poll de gamepad de menu,
-      // pois o game loop de game.js passa a controlar os inputs a partir daqui.
       document.addEventListener('game:selectIniciado', () => {
         const el = document.getElementById('botoesInicio');
         el.classList.add('hidden');
         el.classList.remove('visible');
+        document.getElementById('btnConfig').classList.remove('visible');
         esconder('painelDificuldade');
         esconder('painelQR');
+        esconder('painelConfig');
         _pararPollGamepadMenu();
         _telaAtual = 'jogando';
+        // música de menu continua durante SELECT e QR code
       });
 
-      // game:telaInicial → disparado por game.js ao executar _voltarInicio(),
-      // e também por voltarMenuPosPlacar() neste arquivo.
-      // Restaura os botões da tela inicial.
       document.addEventListener('game:telaInicial', () => {
         esconderLegendas();
         esconderQrPlacar();
         mostrarBotoesInicio();
+        SoundManager.play('menu');
       });
 
-      // game:lutaIniciou → disparado por game.js ao iniciar o FIGHTING.
-      // Exibe as legendas de teclado dos dois jogadores sobre o canvas.
-      document.addEventListener('game:lutaIniciou', mostrarLegendas);
+      document.addEventListener('game:lutaIniciou', () => {
+        mostrarLegendas();
+        SoundManager.play('luta');
+      });
 
-      // game:gameOver → disparado por game.js ao encerrar a partida (_encerrarPartida).
-      // Aguarda 2.5s (animação de GAME OVER no canvas) e então exibe o QR do placar.
       document.addEventListener('game:gameOver', () => {
         esconderLegendas();
+        SoundManager.play('fim');
         setTimeout(mostrarQrPlacar, 2500);
       });
     });
@@ -499,6 +805,7 @@
       const el = document.getElementById('botoesInicio');
       el.classList.remove('hidden');
       el.classList.add('visible');
+      document.getElementById('btnConfig').classList.add('visible');
       esconder('painelQR');
       esconder('painelDificuldade');
       esconderMsg();
@@ -751,10 +1058,16 @@
           const prevRight = prev.h >  dz || prev.btns[15];
           const prevUp    = prev.v < -dz || prev.btns[12];
           const prevDown  = prev.v >  dz || prev.btns[13];
-          if (curLeft  && !prevLeft)  _menuGamepadNavegar(-1);
-          if (curRight && !prevRight) _menuGamepadNavegar(1);
-          if (curUp    && !prevUp)    _menuGamepadNavegar(-1);
-          if (curDown  && !prevDown)  _menuGamepadNavegar(1);
+          if (curLeft  && !prevLeft)  _menuGamepadNavegar(-1, true);
+          if (curRight && !prevRight) _menuGamepadNavegar(1,  true);
+          if (curUp    && !prevUp)    _menuGamepadNavegar(-1, false);
+          if (curDown  && !prevDown)  _menuGamepadNavegar(1,  false);
+
+          // Scroll contínuo de créditos pelo analógico vertical
+          if (_telaAtual === 'config' && _configTab === 'creditos') {
+            const credEl = document.getElementById('scrollCreditos');
+            if (credEl && Math.abs(v) > 0.25) credEl.scrollTop += v * 9;
+          }
           prev.h = h;
           prev.v = v;
           for (let b = 0; b < pad.buttons.length; b++) {
@@ -774,17 +1087,140 @@
       _menuGamepadPrev = {};
     }
 
-    // Move o foco entre os elementos retornados por obterElementosFocaveis().
-    // dir: -1 (esquerda/cima) ou +1 (direita/baixo). Wraps em ambos os extremos.
-    function _menuGamepadNavegar(dir) {
+    // Navega no menu. horizontal=true: esquerda/direita; false: cima/baixo.
+    // Config usa zonas: A=abas(0-2) | B=modo(3-4, só controles) | C=grade/vol | D=rodapé.
+    function _menuGamepadNavegar(dir, horizontal = false) {
+      if (_remapAtivo) return;
+
       const els = obterElementosFocaveis();
       if (!els.length) return;
+
+      if (_telaAtual === 'config') {
+        // ── Calcula zonas para o tab atual ─────────────
+        const TAB_COUNT  = 3;
+        const modoCount  = _configTab === 'controles' ? 2 : 0;
+        const linhas     = _configTab === 'controles'
+          ? document.querySelectorAll('#configGrid .config-linha').length : 0;
+        const volCount   = _configTab === 'som' ? 1 : 0;
+        const contentSz  = modoCount + linhas + volCount;
+        const rodapeCount = Math.max(0, els.length - TAB_COUNT - contentSz);
+
+        const A_END = TAB_COUNT;          // 3
+        const B_END = A_END + modoCount;  // 5 (controles) ou 3 (outros)
+        const GS    = B_END;              // grid/vol start
+        const GE    = GS + linhas + volCount; // grid/vol end
+        const D_STA = GE;                 // rodape start
+        const D_END = D_STA + rodapeCount;
+
+        const inA = i => i >= 0    && i < A_END;
+        const inB = i => i >= A_END && i < B_END;
+        const inG = i => i >= GS   && i < GE;
+        const inD = i => i >= D_STA && i < D_END;
+
+        // ── Horizontal ─────────────────────────────────
+        if (horizontal) {
+          if (inA(_focusIdx)) {
+            // Cicla abas e troca conteúdo imediatamente
+            const newTab = (_focusIdx + dir + TAB_COUNT) % TAB_COUNT;
+            _focusIdx = newTab;
+            _mudarTab(['controles', 'som', 'creditos'][newTab]);
+            return;
+          }
+          if (inB(_focusIdx)) {
+            // Cicla botões de modo (Gamepad ↔ Teclado)
+            const bIdx = _focusIdx - A_END;
+            _focusIdx  = A_END + (bIdx + dir + modoCount) % modoCount;
+          } else if (inG(_focusIdx)) {
+            const f = els[_focusIdx];
+            if (f && f.id === 'volControl') {
+              // Ajusta volume ±5%
+              const pct = Math.min(100, Math.max(0,
+                Math.round(SoundManager.getVolume() * 100) + dir * 5));
+              _atualizarVolume(pct);
+              const s = document.getElementById('sliderVolume');
+              if (s) s.value = pct;
+              return;
+            }
+            if (_configTab === 'controles') {
+              // Alterna coluna P1 ↔ P2
+              const gIdx   = _focusIdx - GS;
+              const newIdx = GS + (gIdx ^ 1);
+              if (newIdx < GE) _focusIdx = newIdx;
+            }
+          } else if (inD(_focusIdx)) {
+            // Move entre Padrão e Fechar
+            const newIdx = _focusIdx + dir;
+            if (newIdx >= D_STA && newIdx < D_END) _focusIdx = newIdx;
+          }
+          atualizarFoco();
+          return;
+        }
+
+        // ── Vertical ───────────────────────────────────
+        if (inA(_focusIdx)) {
+          // Das abas: desce para B (ou C ou D), sobe para D (wrap)
+          if (dir > 0) {
+            _focusIdx = modoCount > 0 ? A_END :
+                        (linhas + volCount > 0 ? GS : (rodapeCount > 0 ? D_STA : 0));
+          } else {
+            _focusIdx = rodapeCount > 0 ? D_END - 1 : els.length - 1;
+          }
+        } else if (inB(_focusIdx)) {
+          // Dos botões modo: desce para C, sobe para última aba
+          _focusIdx = dir > 0 ? GS : A_END - 1;
+        } else if (inG(_focusIdx) && _configTab === 'controles') {
+          // Grade: navegação por linhas
+          const COLS = 2;
+          const gIdx = _focusIdx - GS;
+          const rows = Math.ceil(linhas / COLS);
+          const row  = Math.floor(gIdx / COLS);
+          const col  = gIdx % COLS;
+          const nRow = row + dir;
+          if (nRow < 0) {
+            _focusIdx = modoCount > 0 ? B_END - 1 : A_END - 1;
+          } else if (nRow >= rows) {
+            _focusIdx = Math.min(D_STA + col, D_END - 1);
+          } else {
+            _focusIdx = Math.min(GS + nRow * COLS + col, GE - 1);
+          }
+        } else if (inG(_focusIdx)) {
+          // volControl (Som) ou outro conteúdo único
+          _focusIdx = dir > 0
+            ? (rodapeCount > 0 ? D_STA : 0)
+            : A_END - 1;
+        } else if (inD(_focusIdx)) {
+          // Rodapé: move dentro do rodapé ou wrapa
+          if (dir > 0) {
+            if (_focusIdx + 1 < D_END) _focusIdx++;
+            else _focusIdx = 0; // wrap ao topo
+          } else {
+            if (_focusIdx > D_STA) { _focusIdx--; }
+            else if (_configTab === 'controles' && linhas > 0) {
+              const COLS = 2;
+              const rows = Math.ceil(linhas / COLS);
+              const col  = (_focusIdx - D_STA) % 2;
+              _focusIdx  = GS + Math.min((rows - 1) * COLS + col, linhas - 1);
+            } else if (linhas + volCount > 0) {
+              _focusIdx = GE - 1;
+            } else {
+              _focusIdx = A_END - 1;
+            }
+          }
+        } else {
+          _focusIdx = (_focusIdx + dir + els.length) % els.length;
+        }
+        atualizarFoco();
+        return;
+      }
+
+      // Telas fora do config: flat
       _focusIdx = (_focusIdx + dir + els.length) % els.length;
       atualizarFoco();
     }
 
     // Simula clique no elemento focado — equivale ao Enter/Espaço do teclado.
     function _menuGamepadConfirmar() {
+      if (_remapAtivo) return; // não confirma enquanto aguarda botão para remap
       const els = obterElementosFocaveis();
       if (els[_focusIdx]) els[_focusIdx].click();
     }
@@ -872,22 +1308,23 @@
       function poll() {
         if (!navigator.getGamepads) return;
         const pads = navigator.getGamepads();
-        // Apenas P2 (gamepad 1) tem botões de menu: L2=btn6 (single), R2=btn5 (multi)
+        // Apenas P2 (gamepad 1) tem botões de menu — lê índices do mapeamento atual
         const pad = pads[1];
-        if (!pad || !pad.connected) {
-          _shortcutPrev[1] = null;
-          return;
-        }
+        if (!pad || !pad.connected) { _shortcutPrev[1] = null; return; }
+
+        // Índices dinâmicos: respeitam remapeamento feito no painel de config
+        const l2Idx = Controls.mappings[1].l2;
+        const r2Idx = Controls.mappings[1].r2;
+
         if (!_shortcutPrev[1]) {
-          // Primeira leitura: inicializa prev para não disparar em botões já pressionados
           _shortcutPrev[1] = {
-            l2: !!(pad.buttons[7] && pad.buttons[7].pressed),
-            r2: !!(pad.buttons[6] && pad.buttons[6].pressed)
+            l2: l2Idx >= 0 ? !!(pad.buttons[l2Idx] && pad.buttons[l2Idx].pressed) : false,
+            r2: r2Idx >= 0 ? !!(pad.buttons[r2Idx] && pad.buttons[r2Idx].pressed) : false
           };
           return;
         }
-        const l2 = !!(pad.buttons[7] && pad.buttons[7].pressed);
-        const r2 = !!(pad.buttons[6] && pad.buttons[6].pressed);
+        const l2 = l2Idx >= 0 ? !!(pad.buttons[l2Idx] && pad.buttons[l2Idx].pressed) : false;
+        const r2 = r2Idx >= 0 ? !!(pad.buttons[r2Idx] && pad.buttons[r2Idx].pressed) : false;
         if (l2 && !_shortcutPrev[1].l2) _ativarModoViaBotao('single');
         if (r2 && !_shortcutPrev[1].r2) _ativarModoViaBotao('multi');
         _shortcutPrev[1].l2 = l2;
@@ -977,6 +1414,8 @@
     // Teclas de navegação: setas + WASD movem o foco; Enter/Espaço/K/Numpad2 confirmam.
     // Chama obterElementosFocaveis() para descobrir o conjunto de botões da tela atual.
     function tratarTeclaMenu(e) {
+      // O listener de remap em capture phase já tratou o evento antes de chegar aqui
+      if (_remapAtivo && _configInputMode === 'keyboard') return;
       const estado = Game.getState ? Game.getState() : '';
       if (estado === 'FIGHTING' || estado === 'SELECT' ||
           estado === 'COUNTDOWN' || estado === 'ROUND_END') return;
@@ -992,9 +1431,18 @@
                           e.code === 'KeyK'  || e.code === 'Numpad2');
 
       if (ehEsq || ehDir || ehCima || ehBaixo) {
-        if (ehEsq || ehCima)  _focusIdx = (_focusIdx - 1 + elementos.length) % elementos.length;
-        if (ehDir || ehBaixo) _focusIdx = (_focusIdx + 1) % elementos.length;
-        atualizarFoco();
+        // Scroll do container de créditos via teclado (cima/baixo)
+        if (_telaAtual === 'config' && _configTab === 'creditos') {
+          const credEl = document.getElementById('scrollCreditos');
+          if (credEl) {
+            if (ehCima)  credEl.scrollTop -= 40;
+            if (ehBaixo) credEl.scrollTop += 40;
+          }
+        }
+        if (ehEsq)   _menuGamepadNavegar(-1, true);
+        if (ehDir)   _menuGamepadNavegar(1,  true);
+        if (ehCima)  _menuGamepadNavegar(-1, false);
+        if (ehBaixo) _menuGamepadNavegar(1,  false);
         e.preventDefault();
         return;
       }
@@ -1024,11 +1472,29 @@
       if (document.getElementById('qrPlacarOverlay').classList.contains('visible')) {
         return [document.getElementById('btnPularPlacar')];
       }
+      if (_telaAtual === 'config') {
+        const tabBtns   = Array.from(document.querySelectorAll('.config-tab-btn'));
+        const linhas    = _configTab === 'controles'
+          ? Array.from(document.querySelectorAll('#configGrid .config-linha'))
+          : [];
+        const modoBtns  = _configTab === 'controles'
+          ? Array.from(document.querySelectorAll('.modo-btn'))
+          : [];
+        const volEl     = _configTab === 'som'
+          ? [document.getElementById('volControl')].filter(Boolean)
+          : [];
+        const padraoBtn = document.getElementById('btnConfigPadrao');
+        const fecharBtn = document.getElementById('btnConfigFechar');
+        const rodape    = [padraoBtn, fecharBtn]
+          .filter(el => el && el.style.display !== 'none');
+        return [...tabBtns, ...modoBtns, ...linhas, ...volEl, ...rodape];
+      }
       if (_telaAtual === 'inicial') {
         return [
           document.getElementById('btnSingle'),
-          document.getElementById('btnMulti')
-        ];
+          document.getElementById('btnMulti'),
+          document.getElementById('btnConfig')
+        ].filter(Boolean);
       }
       if (_telaAtual === 'dificuldade') {
         return Array.from(document.querySelectorAll('#painelDificuldade .btn-dif'));
@@ -1052,6 +1518,333 @@
         elementos[_focusIdx].classList.add('focused');
         elementos[_focusIdx].focus({ preventScroll: true });
       }
+    }
+
+    // ── Configuração de Controles ─────────────────────────
+
+    const ACOES_CONFIG = [
+      { id: 'up', label: 'Pulo',      emoji: '🟢' },
+      { id: 'b0', label: 'Ataque 1',  emoji: '🟡' },
+      { id: 'b1', label: 'Ataque 2',  emoji: '⚫' },
+      { id: 'b2', label: 'Bloquear',  emoji: '🔴' },
+      { id: 'b3', label: 'Especial',  emoji: '🔵' },
+    ];
+
+    const MAPEAMENTO_PADRAO = [
+      { up: 1, buttons: [2, 5, 3, 4, -1], l2: -1, r2: -1 },
+      { up: 4, buttons: [1, 5, 2, 3, -1], l2:  7, r2:  6 }
+    ];
+
+    let _remapAtivo             = null;  // { player, acao }
+    let _remapPollId            = null;  // setInterval ID (gamepad poll)
+    let _remapKeyListener       = null;  // keydown/mousedown listener (modo teclado)
+    let _remapWaitingForRelease = false; // espera todos os botões serem soltos
+    let _configTab              = 'controles';
+    let _configInputMode        = 'gamepad'; // 'gamepad' | 'keyboard'
+
+    function abrirConfig() {
+      const el = document.getElementById('botoesInicio');
+      el.classList.add('hidden');
+      el.classList.remove('visible');
+      document.getElementById('btnConfig').classList.remove('visible');
+      mostrar('painelConfig');
+      _telaAtual = 'config';
+      _cancelarRemap();
+      _focusIdx = 0; // foco na primeira aba
+      _mudarTab('controles'); // renderiza conteúdo e atualiza foco
+      _iniciarPollGamepadMenu();
+    }
+
+    function fecharConfig() {
+      _cancelarRemap();
+      esconder('painelConfig');
+      mostrarBotoesInicio();
+    }
+
+    function _mudarTab(tab) {
+      _configTab = tab;
+      document.querySelectorAll('.config-tab-btn').forEach(b =>
+        b.classList.toggle('active', b.dataset.tab === tab));
+      document.getElementById('tabControles').style.display = tab === 'controles' ? 'block' : 'none';
+      document.getElementById('tabSom').style.display       = tab === 'som'       ? 'block' : 'none';
+      document.getElementById('tabCreditos').style.display  = tab === 'creditos'  ? 'block' : 'none';
+
+      // Botão PADRÃO: visível em Controles e Som, oculto em Créditos
+      const padraoBtn = document.getElementById('btnConfigPadrao');
+      if (padraoBtn) padraoBtn.style.display = tab === 'creditos' ? 'none' : '';
+
+      if (tab === 'controles') _renderizarConfig();
+
+      // Sincroniza slider com volume atual ao abrir aba Som
+      if (tab === 'som') {
+        const pct    = Math.round(SoundManager.getVolume() * 100);
+        const slider = document.getElementById('sliderVolume');
+        const lbl    = document.getElementById('lblVolume');
+        if (slider) slider.value      = pct;
+        if (lbl)    lbl.textContent   = pct + '%';
+      }
+
+      // Foca o botão da aba ativa para que o usuário saiba onde está
+      const tabOrder = ['controles', 'som', 'creditos'];
+      _focusIdx = Math.max(0, tabOrder.indexOf(tab));
+      atualizarFoco();
+    }
+
+    function _lerValorMapeamento(player, acao) {
+      if (_configInputMode === 'keyboard') {
+        // Ações de menu (l2/r2) não têm mapeamento de teclado
+        if (acao === 'l2' || acao === 'r2') return null;
+        return _getKeyForAction(player, acao); // retorna e.code ou null
+      }
+      const m = Controls.mappings[player];
+      if (acao === 'up') return m.up;
+      if (acao === 'l2') return m.l2;
+      if (acao === 'r2') return m.r2;
+      if (acao.startsWith('b')) return m.buttons[parseInt(acao[1])];
+      return -1;
+    }
+
+    function _escreverValorMapeamento(player, acao, idx) {
+      const m = Controls.mappings[player];
+      if      (acao === 'up')        m.up                         = idx;
+      else if (acao === 'l2')        m.l2                         = idx;
+      else if (acao === 'r2')        m.r2                         = idx;
+      else if (acao.startsWith('b')) m.buttons[parseInt(acao[1])] = idx;
+    }
+
+    // Gera pares P1|P2 no #configGrid (DOM order interleaved para navegação em grade).
+    function _renderizarConfig() {
+      const grid = document.getElementById('configGrid');
+      if (!grid) return;
+      grid.innerHTML = '';
+
+      function criarLinha(player, acao, label, emoji) {
+        const raw        = _lerValorMapeamento(player, acao);
+        const aguardando = _remapAtivo && _remapAtivo.player === player && _remapAtivo.acao === acao;
+        // Modo teclado: ações l2/r2 são apenas de gamepad (não mapeáveis via teclado)
+        const naoMapeavel = _configInputMode === 'keyboard' && (acao === 'l2' || acao === 'r2');
+        let displayVal;
+        if (aguardando)          displayVal = _remapWaitingForRelease ? '...' : '🎯';
+        else if (naoMapeavel)    displayVal = '—';
+        else if (raw === null || raw === undefined) displayVal = '—';
+        else if (typeof raw === 'string') displayVal = _formatInputCode(raw);  // teclado
+        else displayVal = raw < 0 ? '—' : 'Btn ' + raw;                       // gamepad
+        const btn     = document.createElement('button');
+        btn.className = 'config-linha' + (aguardando ? ' aguardando' : '') + (naoMapeavel ? ' disabled' : '');
+        btn.id        = `cfg-p${player}-${acao}`;
+        btn.onclick   = naoMapeavel ? null : () => _remapSlot(player, acao);
+        btn.disabled  = naoMapeavel;
+        btn.innerHTML =
+          `<span class="config-emoji">${emoji}</span>` +
+          `<span class="config-label">${label}</span>` +
+          `<span class="config-btn-idx">${displayVal}</span>`;
+        return btn;
+      }
+
+      // Atualiza dica conforme estado de remapeamento e modo ativo
+      const hint = document.getElementById('configHint');
+      if (hint) {
+        if (_remapAtivo && _remapWaitingForRelease) {
+          hint.textContent = '⏳ Solte todos os botões...';
+          hint.style.color = '#ff9800';
+        } else if (_remapAtivo && _configInputMode === 'keyboard') {
+          hint.textContent = '⌨ Pressione uma tecla ou botão do mouse...';
+          hint.style.color = '#ffd700';
+        } else if (_remapAtivo) {
+          hint.textContent = '🎮 Pressione o botão no gamepad...';
+          hint.style.color = '#ffd700';
+        } else if (_configInputMode === 'keyboard') {
+          hint.textContent = 'Clique num botão e pressione a tecla / botão do mouse';
+          hint.style.color = '#3a3a4a';
+        } else {
+          hint.textContent = 'Clique num botão e pressione o físico no gamepad para remapear';
+          hint.style.color = '#3a3a4a';
+        }
+      }
+
+      ACOES_CONFIG.forEach(a => {
+        const pair = document.createElement('div');
+        pair.className = 'config-pair';
+        pair.appendChild(criarLinha(0, a.id, a.label, a.emoji));
+        pair.appendChild(criarLinha(1, a.id, a.label, a.emoji));
+        grid.appendChild(pair);
+      });
+
+      const sep = document.createElement('div');
+      sep.className = 'config-sep-h';
+      grid.appendChild(sep);
+
+      const menuPair = document.createElement('div');
+      menuPair.className = 'config-pair';
+      menuPair.appendChild(criarLinha(1, 'l2', 'Singleplayer', '🕹'));
+      menuPair.appendChild(criarLinha(1, 'r2', 'Multiplayer',  '🕹'));
+      grid.appendChild(menuPair);
+    }
+
+    // Modo Gamepad: aguarda todos os botões serem soltos, depois aceita qualquer botão.
+    // Modo Teclado: escuta o próximo keydown ou mousedown (capture phase).
+    function _remapSlot(player, acao) {
+      if (_remapAtivo && _remapAtivo.player === player && _remapAtivo.acao === acao) {
+        _cancelarRemap(); _renderizarConfig(); return;
+      }
+      _cancelarRemap();
+      _remapAtivo             = { player, acao };
+      _remapWaitingForRelease = _configInputMode === 'gamepad';
+      _renderizarConfig();
+
+      if (_configInputMode === 'keyboard') {
+        const onInput = (e) => {
+          e.preventDefault(); e.stopPropagation();
+          if (!_remapAtivo) return;
+          const { player: p, acao: a } = _remapAtivo;
+          let code;
+          if (e.type === 'mousedown') {
+            code = `Mouse${e.button}`;
+          } else {
+            // Ignora modificadores sozinhos
+            if (['ShiftLeft','ShiftRight','ControlLeft','ControlRight',
+                 'AltLeft','AltRight','MetaLeft','MetaRight'].includes(e.code)) return;
+            code = e.code;
+          }
+          _updateKeyForAction(p, a, code);
+          console.log(`[Config KB] ${p === 0 ? 'P1' : 'P2'} ${a} → ${code}`);
+          document.removeEventListener('keydown',   onInput, true);
+          document.removeEventListener('mousedown', onInput, true);
+          _remapKeyListener = null;
+          _cancelarRemap();
+          _renderizarConfig();
+          atualizarFoco();
+        };
+        _remapKeyListener = onInput;
+        document.addEventListener('keydown',   onInput, true);
+        document.addEventListener('mousedown', onInput, true);
+        return;
+      }
+
+      _remapPollId = setInterval(_pollRemap, 50);
+    }
+
+    function _pollRemap() {
+      if (!_remapAtivo || !navigator.getGamepads) return;
+      const { player, acao } = _remapAtivo;
+      const pads = navigator.getGamepads();
+
+      if (_remapWaitingForRelease) {
+        const algumPressionado = Array.from(pads)
+          .filter(p => p && p.connected)
+          .some(p => Array.from(p.buttons).some(b => b && b.pressed));
+        if (!algumPressionado) _remapWaitingForRelease = false;
+        return;
+      }
+
+      for (const pad of pads) {
+        if (!pad || !pad.connected) continue;
+        for (let i = 0; i < pad.buttons.length; i++) {
+          if (pad.buttons[i] && pad.buttons[i].pressed) {
+            _escreverValorMapeamento(player, acao, i);
+            console.log(`[Config GP] ${player === 0 ? 'P1' : 'P2'} ${acao} → Btn ${i}`);
+            _cancelarRemap();
+            _renderizarConfig();
+            atualizarFoco();
+            return;
+          }
+        }
+      }
+    }
+
+    function _cancelarRemap() {
+      if (_remapPollId) { clearInterval(_remapPollId); _remapPollId = null; }
+      if (_remapKeyListener) {
+        document.removeEventListener('keydown',   _remapKeyListener, true);
+        document.removeEventListener('mousedown', _remapKeyListener, true);
+        _remapKeyListener = null;
+      }
+      _remapAtivo             = null;
+      _remapWaitingForRelease = false;
+    }
+
+    // ── Modo de entrada (Gamepad / Teclado) ──────────────────
+
+    // Alterna entre detecção de gamepad e teclado no remapeamento.
+    function _setInputMode(mode) {
+      _configInputMode = mode;
+      document.querySelectorAll('.modo-btn').forEach(b =>
+        b.classList.toggle('active', b.dataset.modo === mode));
+      _cancelarRemap();
+      _renderizarConfig();
+    }
+
+    // Retorna o código de teclado atualmente mapeado para uma ação de um player.
+    function _getKeyForAction(player, acao) {
+      const keymap = player === 0 ? Controls.keymapP1 : Controls.keymapP2;
+      for (const [code, action] of Object.entries(keymap)) {
+        if (action === acao) return code;
+      }
+      return null;
+    }
+
+    // Remove o mapeamento antigo e adiciona o novo código para a ação.
+    function _updateKeyForAction(player, acao, newCode) {
+      const keymap = player === 0 ? Controls.keymapP1 : Controls.keymapP2;
+      for (const code of Object.keys(keymap)) {
+        if (keymap[code] === acao) { delete keymap[code]; break; }
+      }
+      if (newCode) keymap[newCode] = acao;
+    }
+
+    // Formata e.code / mousedown para exibição amigável.
+    function _formatInputCode(code) {
+      if (!code) return '—';
+      return code
+        .replace(/^Key/, '').replace(/^Digit/, '').replace(/^Numpad/, 'N')
+        .replace('ArrowLeft', '◄').replace('ArrowRight', '►')
+        .replace('ArrowUp', '▲').replace('ArrowDown', '▼')
+        .replace('Space', 'Esp').replace('Enter', '↵')
+        .replace('ShiftLeft', 'ShiftL').replace('ShiftRight', 'ShiftR')
+        .replace('ControlLeft', 'CtrlL').replace('ControlRight', 'CtrlR')
+        .replace('Mouse0', 'M.Esq').replace('Mouse1', 'M.Mid').replace('Mouse2', 'M.Dir');
+    }
+
+    // Reseta apenas o submenu ativo: controles → mapeamento padrão; som → volume 35%.
+    function _resetarSubMenuAtual() {
+      if (_configTab === 'controles') {
+        _cancelarRemap();
+        if (_configInputMode === 'gamepad') {
+          MAPEAMENTO_PADRAO.forEach((m, p) => {
+            Controls.mappings[p].up      = m.up;
+            Controls.mappings[p].l2      = m.l2;
+            Controls.mappings[p].r2      = m.r2;
+            Controls.mappings[p].buttons = [...m.buttons];
+          });
+        } else {
+          // Reset keyboard: restaura keymaps originais
+          Object.keys(Controls.keymapP1).forEach(k => delete Controls.keymapP1[k]);
+          Object.assign(Controls.keymapP1, {
+            'KeyA':'left','KeyD':'right','KeyW':'up','KeyS':'down','Space':'up',
+            'KeyJ':'b0','KeyK':'b1','KeyL':'b2','KeyI':'b3','KeyU':'b4'
+          });
+          Object.keys(Controls.keymapP2).forEach(k => delete Controls.keymapP2[k]);
+          Object.assign(Controls.keymapP2, {
+            'ArrowLeft':'left','ArrowRight':'right','ArrowUp':'up','ArrowDown':'down',
+            'Numpad1':'b0','Numpad2':'b1','Numpad3':'b2','Numpad5':'b3','Numpad4':'b4','Numpad0':'b1'
+          });
+        }
+        _renderizarConfig();
+      } else if (_configTab === 'som') {
+        SoundManager.setVolume(0.35);
+        const slider = document.getElementById('sliderVolume');
+        if (slider) slider.value = 35;
+        const lbl = document.getElementById('lblVolume');
+        if (lbl) lbl.textContent = '35%';
+      }
+    }
+
+    // Atualiza volume em tempo real via slider.
+    function _atualizarVolume(val) {
+      const v = parseInt(val);
+      const lbl = document.getElementById('lblVolume');
+      if (lbl) lbl.textContent = v + '%';
+      SoundManager.setVolume(v / 100);
     }
 
     // ── Utils ─────────────────────────────────────────────
