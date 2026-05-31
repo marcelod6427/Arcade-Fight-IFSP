@@ -1553,6 +1553,16 @@
       if (estado === 'FIGHTING' || estado === 'SELECT' ||
           estado === 'COUNTDOWN' || estado === 'ROUND_END') return;
 
+      // Atalhos de teclado para single/multi (F1-F4 padrão, remapeáveis)
+      // Ignorados dentro do painel de config para não conflitar com remapeamento
+      if (_telaAtual !== 'config') {
+        const kms = [Controls.keymapP1, Controls.keymapP2];
+        for (const km of kms) {
+          if (km[e.code] === 'l2') { _ativarModoViaBotao('single'); e.preventDefault(); return; }
+          if (km[e.code] === 'r2') { _ativarModoViaBotao('multi');  e.preventDefault(); return; }
+        }
+      }
+
       const elementos = obterElementosFocaveis();
       if (elementos.length === 0) return;
 
@@ -1734,9 +1744,7 @@
 
     function _lerValorMapeamento(player, acao) {
       if (_configInputMode === 'keyboard') {
-        // Ações de menu (l2/r2) não têm mapeamento de teclado
-        if (acao === 'l2' || acao === 'r2') return null;
-        return _getKeyForAction(player, acao); // retorna e.code ou null
+        return _getKeyForAction(player, acao); // retorna e.code ou null (inclui l2/r2)
       }
       const m = Controls.mappings[player];
       if (acao === 'up') return m.up;
@@ -1763,19 +1771,15 @@
       function criarLinha(player, acao, label, emoji) {
         const raw        = _lerValorMapeamento(player, acao);
         const aguardando = _remapAtivo && _remapAtivo.player === player && _remapAtivo.acao === acao;
-        // Modo teclado: ações l2/r2 são apenas de gamepad (não mapeáveis via teclado)
-        const naoMapeavel = _configInputMode === 'keyboard' && (acao === 'l2' || acao === 'r2');
         let displayVal;
-        if (aguardando)          displayVal = _remapWaitingForRelease ? '...' : '🎯';
-        else if (naoMapeavel)    displayVal = '—';
+        if (aguardando)                          displayVal = _remapWaitingForRelease ? '...' : '🎯';
         else if (raw === null || raw === undefined) displayVal = '—';
-        else if (typeof raw === 'string') displayVal = _formatInputCode(raw);  // teclado
-        else displayVal = raw < 0 ? '—' : 'Btn ' + raw;                       // gamepad
+        else if (typeof raw === 'string')          displayVal = _formatInputCode(raw);
+        else                                       displayVal = raw < 0 ? '—' : 'Btn ' + raw;
         const btn     = document.createElement('button');
-        btn.className = 'config-linha' + (aguardando ? ' aguardando' : '') + (naoMapeavel ? ' disabled' : '');
+        btn.className = 'config-linha' + (aguardando ? ' aguardando' : '');
         btn.id        = `cfg-p${player}-${acao}`;
-        btn.onclick   = naoMapeavel ? null : () => _remapSlot(player, acao);
-        btn.disabled  = naoMapeavel;
+        btn.onclick   = () => _remapSlot(player, acao);
         btn.innerHTML =
           `<span class="config-emoji">${emoji}</span>` +
           `<span class="config-label">${label}</span>` +
@@ -1816,11 +1820,24 @@
       sep.className = 'config-sep-h';
       grid.appendChild(sep);
 
-      const menuPair = document.createElement('div');
-      menuPair.className = 'config-pair';
-      menuPair.appendChild(criarLinha(1, 'l2', 'Singleplayer', '🕹'));
-      menuPair.appendChild(criarLinha(1, 'r2', 'Multiplayer',  '🕹'));
-      grid.appendChild(menuPair);
+      if (_configInputMode === 'keyboard') {
+        // Teclado: P1 e P2 podem ter teclas diferentes para single/multi
+        const pS = document.createElement('div'); pS.className = 'config-pair';
+        pS.appendChild(criarLinha(0, 'l2', 'Singleplayer', '🕹'));
+        pS.appendChild(criarLinha(1, 'l2', 'Singleplayer', '🕹'));
+        grid.appendChild(pS);
+        const pM = document.createElement('div'); pM.className = 'config-pair';
+        pM.appendChild(criarLinha(0, 'r2', 'Multiplayer', '🕹'));
+        pM.appendChild(criarLinha(1, 'r2', 'Multiplayer', '🕹'));
+        grid.appendChild(pM);
+      } else {
+        // Gamepad: só P2 tem botões físicos de menu (L2/R2)
+        const menuPair = document.createElement('div');
+        menuPair.className = 'config-pair';
+        menuPair.appendChild(criarLinha(1, 'l2', 'Singleplayer', '🕹'));
+        menuPair.appendChild(criarLinha(1, 'r2', 'Multiplayer',  '🕹'));
+        grid.appendChild(menuPair);
+      }
     }
 
     // Modo Gamepad: aguarda todos os botões serem soltos, depois aceita qualquer botão.
@@ -1963,12 +1980,14 @@
           Object.keys(Controls.keymapP1).forEach(k => delete Controls.keymapP1[k]);
           Object.assign(Controls.keymapP1, {
             'KeyA':'left','KeyD':'right','KeyW':'up','KeyS':'down','Space':'up',
-            'KeyJ':'b0','KeyK':'b1','KeyL':'b2','KeyI':'b3','KeyU':'b4'
+            'KeyJ':'b0','KeyK':'b1','KeyL':'b2','KeyI':'b3','KeyU':'b4',
+            'F1':'l2','F2':'r2'
           });
           Object.keys(Controls.keymapP2).forEach(k => delete Controls.keymapP2[k]);
           Object.assign(Controls.keymapP2, {
             'ArrowLeft':'left','ArrowRight':'right','ArrowUp':'up','ArrowDown':'down',
-            'Numpad1':'b0','Numpad2':'b1','Numpad3':'b2','Numpad5':'b3','Numpad4':'b4','Numpad0':'b1'
+            'Numpad1':'b0','Numpad2':'b1','Numpad3':'b2','Numpad5':'b3','Numpad4':'b4','Numpad0':'b1',
+            'F3':'l2','F4':'r2'
           });
         }
         _renderizarConfig();

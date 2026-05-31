@@ -1084,15 +1084,14 @@ function _drawSelect() {
       ctx.setLineDash([]);
     }
 
-    // Preview do sprite idle — spriteManager.drawPreview usa sprites/{personagem}/idle/0.png
-    const previewSize = slotH - 80;
+    // Retrato do personagem — sprites/{pasta}/{pasta}.png (com cover + border-radius)
+    const rpW = slotW - 16;
+    const rpH = slotH - 64;
     if (spriteManager && spriteManager.loaded) {
-      spriteManager.drawPreview(ctx, def.id,
-        x + (slotW - previewSize * 0.7) / 2, y + 20,
-        previewSize * 0.7, previewSize);
+      spriteManager.drawRetrato(ctx, def.id, x + 8, y + 8, rpW, rpH);
     } else {
       ctx.fillStyle = def.cor;
-      ctx.fillRect(x + 30, y + 30, slotW - 60, previewSize - 30);
+      ctx.fillRect(x + 8, y + 8, rpW, rpH);
     }
 
     // Overlay escuro com "P1/P2 ESCOLHEU" sobre personagens já confirmados

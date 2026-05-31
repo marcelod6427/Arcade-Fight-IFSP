@@ -186,10 +186,24 @@ class SpriteManager {
         p.animacoes[animKey] = imagens;
       }
 
+      // Retrato estático: sprites/{pasta}/{pasta}.png (ex: espadachim/espadachim.png)
+      const retratoCaminho = path.join(this.spritesPath, def.pasta, def.pasta + '.png')
+                                  .replace(/\\/g, '/');
+      const retrato = new Image();
+      retrato.src   = `file:///${retratoCaminho}`;
+      p.retrato     = null; // preenchido no onload
+      tarefas.push(new Promise(resolve => {
+        retrato.onload  = () => { p.retrato = retrato; resolve(); };
+        retrato.onerror = () => {
+          console.warn('[Sprites] Retrato não encontrado:', retratoCaminho);
+          resolve();
+        };
+      }));
+
       this.personagens.push(p);
     }
 
-    await Promise.all(tarefas); // aguarda todos os frames carregarem (ou falharem)
+    await Promise.all(tarefas); // aguarda todos os frames e retratos carregarem
     this._logResumo();
     this.loaded = true;
   }
@@ -306,6 +320,48 @@ class SpriteManager {
         ctx.drawImage(img, feetX - drawW / 2, feetY - drawH, drawW, drawH);
       }
     }
+    ctx.restore();
+  }
+
+  // Renderiza o retrato estático do personagem (sprites/{pasta}/{pasta}.png).
+  // Aplica object-fit:cover (escala para preencher o box, centrado e cortado) e
+  // clip com border-radius de 20px em todos os cantos.
+  // Fallback automático para drawPreview() se o retrato não carregou.
+  drawRetrato(ctx, personagemId, x, y, w, h) {
+    const p = this.personagens[personagemId];
+    if (!p) return;
+    const img = p.retrato;
+    if (!img || img.naturalWidth === 0) {
+      this.drawPreview(ctx, personagemId, x, y, w, h);
+      return;
+    }
+    ctx.save();
+    // Clip arredondado (border-radius 20px)
+    const r = 20;
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+    ctx.clip();
+    // Object-fit: cover — escala para preencher, centraliza e corta o excesso
+    const imgAR = img.naturalWidth / img.naturalHeight;
+    const boxAR = w / h;
+    let dw, dh, dx, dy;
+    if (imgAR > boxAR) {
+      dh = h; dw = h * imgAR;
+      dx = x - (dw - w) / 2; dy = y;
+    } else {
+      dw = w; dh = w / imgAR;
+      dx = x; dy = y - (dh - h) / 2;
+    }
+    ctx.drawImage(img, dx, dy, dw, dh);
     ctx.restore();
   }
 

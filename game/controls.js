@@ -91,7 +91,9 @@ const Controls = {
     'KeyK':  'b1',   // ataque forte
     'KeyL':  'b2',   // defender
     'KeyI':  'b3',   // especial
-    'KeyU':  'b4'    // counter
+    'KeyU':  'b4',   // counter
+    'F1':    'l2',   // atalho de teclado para Single Player
+    'F2':    'r2'    // atalho de teclado para Multi Player
   },
 
   // ── Mapeamento de teclado — P2 ────────────────────────────────────────────
@@ -105,7 +107,9 @@ const Controls = {
     'Numpad3':    'b2',   // defender
     'Numpad5':    'b3',   // especial
     'Numpad4':    'b4',   // counter
-    'Numpad0':    'b1'    // alternativa de ataque forte / pulo
+    'Numpad0':    'b1',   // alternativa de ataque forte / pulo
+    'F3':         'l2',   // atalho de teclado para Single Player
+    'F4':         'r2'    // atalho de teclado para Multi Player
   },
 
   // Conjunto de teclas atualmente pressionadas (e.code).
