@@ -92,3 +92,12 @@ Essas entradas foram adicionadas a `keymapP1` e `keymapP2` em `controls.js`.
 | `game/game.js`       | Uso de `drawRetrato()`, ajuste de altura e margem               |
 | `game/controls.js`   | Adição de teclas padrão `l2`/`r2` nos keymaps de P1 e P2       |
 | `game/index.html`    | Config de teclado para single/multi, layout do painel, detecção de atalhos |
+
+
+
+a função de sair da partida apertando os botões de single e multiplayer não está funcionando, quando eu entrasse no modo offline (ou sem guardar informações dos jogadores) deveria aparecer uma confirmação do jogador se ele realmente quer voltar para o menu com as opções sim ou não e o fundo em volta da notificação mostrando o jogo pausado de forma meio embaçada.
+e qunado estiver no modo online a mesma coisa porem a notificação deve abordar algo como "os dados nao seram salvos se retornar ao menu agora..." com as opçõse de sim ou nao
+
+eu identifiquei o erro que você deixou, não é para no final da partida o player clicar no botao de single ou multi para voltar o menu, e sim durante as partidas, como foi especificado acima
+
+outro porem, deixe o height das imagens do menu de seleção de personagens noraml novamente, nao ficou bom tirar os px
