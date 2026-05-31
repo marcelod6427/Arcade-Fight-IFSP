@@ -329,11 +329,12 @@
     .som-item { margin-bottom: 18px; }
     .som-label { display: block; color: #aaa; font-size: 12px; font-weight: 700;
                  margin-bottom: 8px; font-family: monospace; letter-spacing: 1px; }
-    #volControl {
+    #volControl, #volSFXControl {
       border: 1px solid #252535; border-radius: 8px; padding: 8px 10px;
       cursor: pointer; transition: border-color .15s; outline: none;
     }
-    #volControl.focused, #volControl:hover { border-color: #e94560; }
+    #volControl.focused, #volControl:hover,
+    #volSFXControl.focused, #volSFXControl:hover { border-color: #e94560; }
     .som-slider-row { display: flex; align-items: center; gap: 12px; }
     .som-slider-row input[type="range"] { flex: 1; accent-color: #e94560; cursor: pointer; }
     .som-slider-row span { color: #ffd700; font-size: 14px; font-weight: 900;
@@ -364,7 +365,9 @@
     #confirmSaida {
       display: none; position: absolute; top: 0; left: 0;
       width: 100%; height: 100%;
-      background: rgba(0,0,0,0.72);
+      background: rgba(0,0,0,0.65);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
       z-index: 90;
       align-items: center; justify-content: center;
       pointer-events: all;
@@ -378,8 +381,8 @@
       text-align: center;
       max-width: 480px;
     }
-    .confirm-box h3 { color: #e94560; font-size: 22px; margin-bottom: 12px; letter-spacing: 1px; }
-    .confirm-box p  { color: #aaa; font-size: 13px; line-height: 1.8; margin-bottom: 26px; }
+    .confirm-box h3 { color: #e94560; font-size: 22px; margin-bottom: 14px; letter-spacing: 1px; }
+    .confirm-box p  { color: #aaa; font-size: 13px; line-height: 1.8; margin-bottom: 24px; }
     .confirm-box p strong { color: #ffd700; }
     .confirm-btns { display: flex; gap: 16px; justify-content: center; }
     .confirm-btns button {
@@ -505,6 +508,15 @@
             </div>
             <p class="som-hint">◄ ► para ajustar  |  ⟲ PADRÃO = 35%</p>
           </div>
+          <div class="som-item" id="volSFXControl" tabindex="-1">
+            <span class="som-label">🔊 Volume dos Efeitos (SFX)</span>
+            <div class="som-slider-row">
+              <input type="range" id="sliderSFX" min="0" max="100" value="45"
+                     oninput="_atualizarVolumeSFX(this.value)">
+              <span id="lblSFX">45%</span>
+            </div>
+            <p class="som-hint">◄ ► para ajustar  |  ⟲ PADRÃO = 45%</p>
+          </div>
         </div>
       </div>
 
@@ -586,15 +598,17 @@
       <button id="btnJogarSemLogin" onclick="jogarSemLogin()">▶ Jogar sem Login</button>
     </div>
 
-    <!-- Modal de confirmação de abandono (só online) -->
+    <!-- Modal de confirmação de saída (offline e online) -->
     <div id="confirmSaida">
       <div class="confirm-box">
-        <h3>⚠ Abandonar a partida?</h3>
-        <p>Sair agora resultará na <strong>perda dos resultados</strong><br>
-           no placar online.<br>Tem certeza que deseja abandonar?</p>
+        <h3 id="confirmTitulo">⚠ Voltar ao menu?</h3>
+        <p id="confirmAviso" style="display:none">
+          Os dados desta partida <strong>não serão salvos</strong> no placar online.<br>
+          Deseja mesmo voltar ao menu principal?
+        </p>
         <div class="confirm-btns">
-          <button id="btnConfirmSim" onclick="_confirmarSaida()">Sim, sair</button>
-          <button id="btnConfirmNao" onclick="_cancelarSaida()">Não, continuar</button>
+          <button id="btnConfirmSim" onclick="_confirmarSaida()">Sim</button>
+          <button id="btnConfirmNao" onclick="_cancelarSaida()">Não</button>
         </div>
       </div>
     </div>
@@ -879,7 +893,7 @@
       document.getElementById('btnVoltar').classList.remove('visible');
 
       _telaAtual = 'inicial';
-      _focusIdx  = 0;
+      _focusIdx  = 2; // índice 2 = btnSingle (após btnConfig e btnFechar)
       // Nao sobrescreve foco se a notificacao offline ainda estiver visivel
       if (!document.getElementById('notifOffline').classList.contains('visible')) {
         atualizarFoco();
@@ -1168,7 +1182,7 @@
         const modoCount  = _configTab === 'controles' ? 2 : 0;
         const linhas     = _configTab === 'controles'
           ? document.querySelectorAll('#configGrid .config-linha').length : 0;
-        const volCount   = _configTab === 'som' ? 1 : 0;
+        const volCount   = _configTab === 'som' ? 2 : 0;
         const contentSz  = modoCount + linhas + volCount;
         const rodapeCount = Math.max(0, els.length - TAB_COUNT - contentSz);
 
@@ -1200,11 +1214,21 @@
           } else if (inG(_focusIdx)) {
             const f = els[_focusIdx];
             if (f && f.id === 'volControl') {
-              // Ajusta volume ±5%
+              // Ajusta volume da música ±5%
               const pct = Math.min(100, Math.max(0,
                 Math.round(SoundManager.getVolume() * 100) + dir * 5));
               _atualizarVolume(pct);
               const s = document.getElementById('sliderVolume');
+              if (s) s.value = pct;
+              return;
+            }
+            if (f && f.id === 'volSFXControl') {
+              // Ajusta volume dos efeitos ±5%
+              const sfxVol = window.SFXManager ? SFXManager.getVolume() : 0.45;
+              const pct = Math.min(100, Math.max(0,
+                Math.round(sfxVol * 100) + dir * 5));
+              _atualizarVolumeSFX(pct);
+              const s = document.getElementById('sliderSFX');
               if (s) s.value = pct;
               return;
             }
@@ -1251,10 +1275,14 @@
             _focusIdx = Math.min(GS + nRow * COLS + col, GE - 1);
           }
         } else if (inG(_focusIdx)) {
-          // volControl (Som) ou outro conteúdo único
-          _focusIdx = dir > 0
-            ? (rodapeCount > 0 ? D_STA : 0)
-            : A_END - 1;
+          // Som: navega entre os sliders; ao sair da zona, vai para rodapé ou abas
+          if (dir > 0) {
+            if (_focusIdx + 1 < GE) _focusIdx++;
+            else _focusIdx = rodapeCount > 0 ? D_STA : 0;
+          } else {
+            if (_focusIdx > GS) _focusIdx--;
+            else _focusIdx = A_END - 1;
+          }
         } else if (inD(_focusIdx)) {
           // Rodapé: move dentro do rodapé ou wrapa
           if (dir > 0) {
@@ -1434,6 +1462,7 @@
     //   O usuário então escolhe o modo manualmente — sem disparo automático de clicarSingle/Multi.
     // Executa a saída efetiva da partida (limpeza completa → menu inicial).
     function _executarSaida() {
+      SoundManager.play('menu');
       _stopPolling();
       if (_salaId) {
         try { Api.cancelarSala(_salaId); } catch(e) {}
@@ -1451,9 +1480,20 @@
       mostrarBotoesInicio();
     }
 
-    // Exibe o modal de confirmação de abandono (só durante partida online).
+    // Exibe o modal de confirmação de saída (offline e online, com título diferente).
     function _mostrarConfirmacaoSaida() {
       _pendenteSaida = true;
+
+      const titulo = document.getElementById('confirmTitulo');
+      const aviso  = document.getElementById('confirmAviso');
+      if (_modoOffline) {
+        if (titulo) titulo.textContent  = '⚠ Voltar ao menu?';
+        if (aviso)  aviso.style.display = 'none';
+      } else {
+        if (titulo) titulo.textContent  = '⚠ Abandonar a partida?';
+        if (aviso)  aviso.style.display = '';
+      }
+
       document.getElementById('confirmSaida').classList.add('visible');
       if (Game.pausar) Game.pausar();
       _telaAtual = 'confirmSaida';
@@ -1489,15 +1529,15 @@
         return;
       }
 
-      // Durante partida ativa E online: pedir confirmação antes de sair
+      // Durante partida ativa (offline ou online): pedir confirmação antes de sair
       const partidaAtiva = (estado === 'FIGHTING' || estado === 'COUNTDOWN' ||
                             estado === 'ROUND_END' || estado === 'SELECT');
-      if (!_modoOffline && partidaAtiva) {
+      if (partidaAtiva) {
         _mostrarConfirmacaoSaida();
         return;
       }
 
-      // Offline ou GAME_OVER: sair direto, sem confirmação
+      // GAME_OVER: sair direto, sem confirmação
       _executarSaida();
     }
 
@@ -1550,18 +1590,20 @@
       // O listener de remap em capture phase já tratou o evento antes de chegar aqui
       if (_remapAtivo && _configInputMode === 'keyboard') return;
       const estado = Game.getState ? Game.getState() : '';
-      if (estado === 'FIGHTING' || estado === 'SELECT' ||
-          estado === 'COUNTDOWN' || estado === 'ROUND_END') return;
 
-      // Atalhos de teclado para single/multi (F1-F4 padrão, remapeáveis)
-      // Ignorados dentro do painel de config para não conflitar com remapeamento
-      if (_telaAtual !== 'config') {
+      // Atalhos l2/r2 verificados ANTES do early-return de estado de luta,
+      // pois precisam funcionar durante FIGHTING para abrir o modal de saída.
+      if (_telaAtual !== 'config' && !_pendenteSaida) {
         const kms = [Controls.keymapP1, Controls.keymapP2];
         for (const km of kms) {
           if (km[e.code] === 'l2') { _ativarModoViaBotao('single'); e.preventDefault(); return; }
           if (km[e.code] === 'r2') { _ativarModoViaBotao('multi');  e.preventDefault(); return; }
         }
       }
+
+      // Navegação de menu bloqueada durante luta, exceto quando um modal está aberto
+      if ((estado === 'FIGHTING' || estado === 'SELECT' ||
+           estado === 'COUNTDOWN' || estado === 'ROUND_END') && !_pendenteSaida) return;
 
       const elementos = obterElementosFocaveis();
       if (elementos.length === 0) return;
@@ -1630,7 +1672,7 @@
           ? Array.from(document.querySelectorAll('.modo-btn'))
           : [];
         const volEl     = _configTab === 'som'
-          ? [document.getElementById('volControl')].filter(Boolean)
+          ? [document.getElementById('volControl'), document.getElementById('volSFXControl')].filter(Boolean)
           : [];
         const padraoBtn = document.getElementById('btnConfigPadrao');
         const fecharBtn = document.getElementById('btnConfigFechar');
@@ -1727,13 +1769,19 @@
 
       if (tab === 'controles') _renderizarConfig();
 
-      // Sincroniza slider com volume atual ao abrir aba Som
+      // Sincroniza sliders com volumes atuais ao abrir aba Som
       if (tab === 'som') {
         const pct    = Math.round(SoundManager.getVolume() * 100);
         const slider = document.getElementById('sliderVolume');
         const lbl    = document.getElementById('lblVolume');
-        if (slider) slider.value      = pct;
-        if (lbl)    lbl.textContent   = pct + '%';
+        if (slider) slider.value    = pct;
+        if (lbl)    lbl.textContent = pct + '%';
+
+        const sfxPct    = window.SFXManager ? Math.round(SFXManager.getVolume() * 100) : 45;
+        const sfxSlider = document.getElementById('sliderSFX');
+        const sfxLbl    = document.getElementById('lblSFX');
+        if (sfxSlider) sfxSlider.value    = sfxPct;
+        if (sfxLbl)    sfxLbl.textContent = sfxPct + '%';
       }
 
       // Foca o botão da aba ativa para que o usuário saiba onde está
@@ -1997,15 +2045,29 @@
         if (slider) slider.value = 35;
         const lbl = document.getElementById('lblVolume');
         if (lbl) lbl.textContent = '35%';
+
+        if (window.SFXManager) SFXManager.setVolume(0.45);
+        const sfxSlider = document.getElementById('sliderSFX');
+        if (sfxSlider) sfxSlider.value = 45;
+        const sfxLbl = document.getElementById('lblSFX');
+        if (sfxLbl) sfxLbl.textContent = '45%';
       }
     }
 
-    // Atualiza volume em tempo real via slider.
+    // Atualiza volume da música em tempo real via slider.
     function _atualizarVolume(val) {
       const v = parseInt(val);
       const lbl = document.getElementById('lblVolume');
       if (lbl) lbl.textContent = v + '%';
       SoundManager.setVolume(v / 100);
+    }
+
+    // Atualiza volume dos efeitos sonoros (SFX) em tempo real via slider.
+    function _atualizarVolumeSFX(val) {
+      const v = parseInt(val);
+      const lbl = document.getElementById('lblSFX');
+      if (lbl) lbl.textContent = v + '%';
+      if (window.SFXManager) SFXManager.setVolume(v / 100);
     }
 
     // ── Utils ─────────────────────────────────────────────

@@ -324,7 +324,7 @@ class SpriteManager {
   }
 
   // Renderiza o retrato estático do personagem (sprites/{pasta}/{pasta}.png).
-  // Aplica object-fit:cover (escala para preencher o box, centrado e cortado) e
+  // Aplica object-fit:contain (mantém proporção, sem corte) e
   // clip com border-radius de 20px em todos os cantos.
   // Fallback automático para drawPreview() se o retrato não carregou.
   drawRetrato(ctx, personagemId, x, y, w, h) {
@@ -350,16 +350,16 @@ class SpriteManager {
     ctx.quadraticCurveTo(x, y, x + r, y);
     ctx.closePath();
     ctx.clip();
-    // Object-fit: cover — escala para preencher, centraliza e corta o excesso
+    // Object-fit: contain — escala para caber no box mantendo proporção (sem corte)
     const imgAR = img.naturalWidth / img.naturalHeight;
     const boxAR = w / h;
     let dw, dh, dx, dy;
     if (imgAR > boxAR) {
-      dh = h; dw = h * imgAR;
-      dx = x - (dw - w) / 2; dy = y;
-    } else {
       dw = w; dh = w / imgAR;
-      dx = x; dy = y - (dh - h) / 2;
+      dx = x; dy = y + (h - dh) / 2;
+    } else {
+      dh = h; dw = h * imgAR;
+      dx = x + (w - dw) / 2; dy = y;
     }
     ctx.drawImage(img, dx, dy, dw, dh);
     ctx.restore();

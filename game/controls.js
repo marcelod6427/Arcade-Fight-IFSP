@@ -8,10 +8,6 @@
 //   b0 = ataque rápido   b1 = ataque forte   b2 = bloquear
 //   b3 = especial        b4 = counter (sem mapeamento gamepad)
 //
-// Mapeamento teclado:
-//   P1: A/D mover | W/Espaço pular | J=b0 K=b1 L=b2 I=b3 U=b4
-//   P2: ◄/► mover | ▲ pular       | Num1=b0 Num2=b1 Num3=b2 Num5=b3 Num4=b4
-//
 // Mapeamento gamepad (arcade físico — índices reais detectados via DEBUG_GAMEPAD):
 //
 //   Player 1 (gamepad 0):

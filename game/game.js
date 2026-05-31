@@ -116,13 +116,24 @@ function _tryLoadSound(basePath, name) {
 }
 
 const SFXManager = {
-  _sons:  {},   // { personagemIdx: { attack1, attack2, especial, hurt, death } }
-  _nomes: ['Espadachim', 'Lutador', 'Mago', 'Vampira', 'Vampiro'],
+  _sons:   {},   // { personagemIdx: { attack1, attack2, especial, hurt, death } }
+  _nomes:  ['Espadachim', 'Lutador', 'Mago', 'Vampira', 'Vampiro'],
+  _volume: 0.45,
+
+  setVolume(v) {
+    this._volume = Math.max(0, Math.min(1, v));
+    localStorage.setItem('arcade_sfx_volume', this._volume);
+  },
+
+  getVolume() { return this._volume; },
 
   // Carrega todos os sons dos 5 personagens em paralelo.
   // Estrutura: sound/NomePersonagem/tipoNomePersonagem.(mp3|wav)
   // Testa .mp3 primeiro, depois .wav para cada arquivo.
   async init(basePath) {
+    const saved = parseFloat(localStorage.getItem('arcade_sfx_volume'));
+    this._volume = isNaN(saved) ? 0.45 : Math.max(0, Math.min(1, saved));
+
     const tipos = ['attack1', 'attack2', 'especial', 'hurt', 'death'];
     const proms = [];
     for (let i = 0; i < this._nomes.length; i++) {
@@ -154,7 +165,7 @@ const SFXManager = {
     const som = this._sons[personagemIdx]?.[tipo];
     if (!som) return;
     const clone = som.cloneNode(false);
-    clone.volume = 0.7;
+    clone.volume = this._volume;
     clone.play().catch(() => {});
   }
 };
@@ -1331,3 +1342,5 @@ window.Game = {
   pausar:  () => { gamePausado = true;  },  // congela update() durante modal de saída
   retomar: () => { gamePausado = false; },  // retoma update() ao fechar modal
 };
+
+window.SFXManager = SFXManager;
