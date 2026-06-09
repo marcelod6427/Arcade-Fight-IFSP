@@ -147,6 +147,8 @@ const SFXManager = {
     console.log('[SFX] Inicialização concluída.');
   },
 
+  _volume: 0.7, // configurado externamente via window.Game.setSfxVolume
+
   // Toca um efeito sonoro do personagem.
   // Só executa durante FIGHTING. Usa cloneNode para permitir sobreposição.
   play(personagemIdx, tipo) {
@@ -154,7 +156,7 @@ const SFXManager = {
     const som = this._sons[personagemIdx]?.[tipo];
     if (!som) return;
     const clone = som.cloneNode(false);
-    clone.volume = 0.7;
+    clone.volume = Math.max(0, Math.min(1, this._volume));
     clone.play().catch(() => {});
   }
 };
@@ -650,10 +652,10 @@ function updateSelect() {
     if (selecao.escolhido[p] !== null) continue;
 
     if (Controls.justPressed(p, 'left')) {
-      selecao.cursor[p] = (selecao.cursor[p] - 1 + totalPersonagens) % totalPersonagens;
+      selecao.cursor[p] = Math.max(0, selecao.cursor[p] - 1);
     }
     if (Controls.justPressed(p, 'right')) {
-      selecao.cursor[p] = (selecao.cursor[p] + 1) % totalPersonagens;
+      selecao.cursor[p] = Math.min(totalPersonagens - 1, selecao.cursor[p] + 1);
     }
 
     // Confirmar com 'up' (W/Espaço teclado, Cruz gamepad, D-pad cima)
@@ -1328,6 +1330,7 @@ window.Game = {
   setDificuldade,
   getState:     () => gameState,
   voltarInicio: _voltarInicio,
-  pausar:  () => { gamePausado = true;  },  // congela update() durante modal de saída
-  retomar: () => { gamePausado = false; },  // retoma update() ao fechar modal
+  pausar:  () => { gamePausado = true;  },
+  retomar: () => { gamePausado = false; },
+  setSfxVolume: v => { SFXManager._volume = Math.max(0, Math.min(1, v)); },
 };

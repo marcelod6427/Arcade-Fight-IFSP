@@ -92,21 +92,23 @@ const Api = {
   // ── Conectividade ──────────────────────────────────────────────────────────
 
   // Verifica se o servidor online está acessível antes de iniciar o jogo.
-  // Timeout de 3s — se não responder, cai para localhost (modo offline).
+  // Tenta até 5 vezes com timeout de 3s cada — se nenhuma responder, cai para localhost.
   // Como efeito colateral, ajusta API_BASE para a URL correta antes de Game.init().
   // Chamado por index.html no DOMContentLoaded, antes de Game.init().
   // ► GET / → backend/main.py: root() — retorna { status: "ok" }
   async verificarConexao() {
-    try {
-      const controller = new AbortController();
-      const tid = setTimeout(() => controller.abort(), 3000);
-      const res = await fetch(ONLINE_URL + '/', { signal: controller.signal });
-      clearTimeout(tid);
-      if (res.ok) {
-        API_BASE = ONLINE_URL;
-        return true;
-      }
-    } catch { /* timeout ou sem rede */ }
+    for (let i = 0; i < 5; i++) {
+      try {
+        const controller = new AbortController();
+        const tid = setTimeout(() => controller.abort(), 3000);
+        const res = await fetch(ONLINE_URL + '/', { signal: controller.signal });
+        clearTimeout(tid);
+        if (res.ok) {
+          API_BASE = ONLINE_URL;
+          return true;
+        }
+      } catch { /* timeout ou sem rede — tenta novamente */ }
+    }
     API_BASE = OFFLINE_URL;
     return false;
   }

@@ -51,21 +51,22 @@ timeout /t 5 /nobreak >nul
 echo [2/2] Iniciando jogo (Electron)...
 echo.
 
-echo  Verificando servidor online...
 set "TENTATIVA=1"
 :verificar_servidor
+echo  Verificando conexao com o servidor... (tentativa !TENTATIVA!/5)
 powershell -NoProfile -Command "try{$r=(Invoke-WebRequest -Uri 'https://arcade-fight-ifsp.onrender.com' -TimeoutSec 5 -UseBasicParsing).Content; if($r -match 'API rodando'){exit 0}else{exit 1}}catch{exit 1}"
-if !errorlevel!==0 (
+set "RESULTADO=!errorlevel!"
+if !RESULTADO! EQU 0 (
     echo  Servidor online! Iniciando o jogo...
     echo.
     goto :iniciar_electron
 )
-if !TENTATIVA!==4 (
-    echo  Conexao falhou apos 4 tentativas. Iniciando modo offline...
+if !TENTATIVA! EQU 5 (
+    echo  Conexao falhou apos 5 tentativas. Iniciando modo offline...
     echo.
     goto :iniciar_electron
 )
-echo  Aguardando servidor... (tentativa !TENTATIVA!/4)
+echo  Servidor nao respondeu. Aguardando 3s antes da proxima tentativa...
 set /a TENTATIVA=!TENTATIVA!+1
 timeout /t 3 /nobreak >nul
 goto :verificar_servidor
