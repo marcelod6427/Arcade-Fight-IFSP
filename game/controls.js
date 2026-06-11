@@ -8,23 +8,20 @@
 //   b0 = ataque rápido   b1 = ataque forte   b2 = bloquear
 //   b3 = especial        b4 = counter (sem mapeamento gamepad)
 //
-// Mapeamento teclado:
-//   P1: A/D mover | W/Espaço pular | J=b0 K=b1 L=b2 I=b3 U=b4
-//   P2: ◄/► mover | ▲ pular       | Num1=b0 Num2=b1 Num3=b2 Num5=b3 Num4=b4
-//
 // Mapeamento gamepad (arcade físico — índices reais detectados via DEBUG_GAMEPAD):
 //
 //   Player 1 (gamepad 0):
 //     Eixo 0 → esquerda/direita   Eixo 1 → cima/baixo
-//     Btn 3 → pulo     Btn 0 → b0 ataque rápido   Btn 4 → b1 ataque forte
-//     Btn 1 → b2 bloquear        Btn 2 → b3 especial
-//     Btn 5 (L2) → single player — tratado em index.html
+//     Btn 1 (verde)    → pulo     Btn 2 (amarelo) → b0 ataque rápido
+//     Btn 5 (preto)    → b1 ataque forte           Btn 4 (azul)    → b3 especial
+//     Btn 3 (vermelho) → b2 bloquear               (sem botões de menu)
 //
 //   Player 2 (gamepad 1):
 //     Eixo 0 → esquerda/direita   Eixo 1 → cima/baixo
-//     Btn 3 → pulo     Btn 0 → b0 ataque rápido   Btn 1 → b1 ataque forte
-//     Btn 4 → b2 bloquear        Btn 2 → b3 especial
-//     Btn 5 (R2) → multiplayer — tratado em index.html
+//     Btn 4 (verde)    → pulo     Btn 1 (amarelo) → b0 ataque rápido
+//     Btn 5 (preto)    → b1 ataque forte           Btn 3 (azul)    → b3 especial
+//     Btn 2 (vermelho) → b2 bloquear
+//     Btn 7 (single)   → L2 menu  Btn 6 (multi)   → R2 menu — tratados em index.html
 //
 // Exporta para window:
 //   window.Controls — objeto singleton com state, prev e todos os métodos
@@ -59,23 +56,14 @@ const Controls = {
   // deadzone: deflexão mínima do analógico para ser considerado input
   mappings: [
     // Player 1 — gamepad índice 0
-    {
-      up:      3,                 // btn3 → pulo
-      buttons: [0, 4, 1, 2, -1], // b0=btn0 b1=btn4 b2=btn1 b3=btn2 b4=sem mapeamento
-      l2:      5,                 // btn5 → single player
-      r2:      -1,
-      axes:    [0, 1],
-      deadzone: 0.3
-    },
+    { up: 3, buttons: [0, 4, 1, 2, -1], l2: 5, r2: -1, axes: [0,1], deadzone: 0.3 },
     // Player 2 — gamepad índice 1
-    {
-      up:      3,                 // btn3 → pulo
-      buttons: [0, 1, 4, 2, -1], // b0=btn0 b1=btn1 b2=btn4 b3=btn2 b4=sem mapeamento
-      l2:      -1,
-      r2:      5,                 // btn5 → multiplayer
-      axes:    [0, 1],
-      deadzone: 0.3
-    }
+    { up: 3, buttons: [0, 1, 4, 2, -1], l2: -1, r2: 5, axes: [0,1], deadzone: 0.3 }
+  ],
+
+  _menuPrev: [
+    { l2: false, r2: false },
+    { l2: false, r2: false }
   ],
 
   // ── Mapeamento de teclado — P1 ────────────────────────────────────────────
@@ -110,13 +98,6 @@ const Controls = {
     'F3':         'l2',   // atalho de teclado para Single Player
     'F4':         'r2'    // atalho de teclado para Multi Player
   },
-
-  // Estado anterior dos botões L2/R2 para detecção de borda de subida no update().
-  // Separado de state/prev para não interferir com o estado de combate.
-  _menuPrev: [
-    { l2: false, r2: false },
-    { l2: false, r2: false }
-  ],
 
   // Conjunto de teclas atualmente pressionadas (e.code).
   // Mantido via keydown/keyup — não depende do game loop.
@@ -221,20 +202,15 @@ const Controls = {
       }
     }
 
-    // ── 5. Detecta L2/R2 (botões de menu) — borda de subida ─────────────────
-    // Roda no mesmo loop de leitura do gamepad para garantir sincronismo de 60fps.
-    // Usa _menuPrev separado do state/prev de combate para não interferir no jogo.
-    // Ao detectar justPressed, dispara CustomEvent 'controls:menuBtn' ouvido por index.html.
-    // _ignoreInputFrames > 0: atualiza prev mas não dispara, evitando falsos positivos
-    // na transição de tela (resetInput define 8 frames de graça).
+    // Detecção de L2/R2 — borda de subida → dispara CustomEvent para index.html
     for (let p = 0; p < 2; p++) {
       const pad = pads[p];
       if (!pad || !pad.connected) {
         this._menuPrev[p].l2 = this._menuPrev[p].r2 = false;
         continue;
       }
-      const m   = this.mappings[p];
-      const _b  = idx => {
+      const m = this.mappings[p];
+      const _b = idx => {
         if (idx < 0) return false;
         const b = pad.buttons[idx];
         return b ? (typeof b === 'object' ? b.pressed : b > 0) : false;
@@ -342,18 +318,16 @@ const Controls = {
       this.prev[p].down  = this.state[p].down;
       for (let b = 0; b < 5; b++) this.prev[p].btn[b] = this.state[p].btn[b];
 
-      // Espelha L2/R2 em _menuPrev para que o update() não dispare evento no botão já segurado
-      if (navigator.getGamepads) {
-        const pad2 = navigator.getGamepads()[p];
-        const m2   = this.mappings[p];
-        const _b2  = idx => {
-          if (!pad2 || !pad2.connected || idx < 0) return false;
-          const b = pad2.buttons[idx];
-          return b ? (typeof b === 'object' ? b.pressed : b > 0) : false;
-        };
-        this._menuPrev[p].l2 = _b2(m2.l2);
-        this._menuPrev[p].r2 = _b2(m2.r2);
-      }
+      // Snapshot L2/R2 em _menuPrev — evita eventos espúrios durante transições de tela
+      const padSnap = navigator.getGamepads ? navigator.getGamepads()[p] : null;
+      const mSnap = this.mappings[p];
+      const _bSnap = idx => {
+        if (idx < 0 || !padSnap || !padSnap.connected) return false;
+        const b = padSnap.buttons[idx];
+        return b ? (typeof b === 'object' ? b.pressed : b > 0) : false;
+      };
+      this._menuPrev[p].l2 = _bSnap(mSnap.l2);
+      this._menuPrev[p].r2 = _bSnap(mSnap.r2);
     }
   }
 };

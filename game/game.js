@@ -91,38 +91,47 @@ let selecao = {
 // Independente da trilha sonora principal — sons tocam em canais separados.
 // =============================================================================
 
-// Tenta carregar um áudio testando .mp3 e depois .wav.
-// Retorna um HTMLAudioElement pronto ou null se ambas as extensões falharem.
+// Tenta carregar um áudio testando .mp3 e .wav em paralelo.
+// Resolve com o primeiro que carregar; null se ambos falharem ou timeout (5s).
 function _tryLoadSound(basePath, name) {
   return new Promise(resolve => {
     const exts = ['.mp3', '.wav'];
-    let idx = 0;
-    const tryNext = () => {
-      if (idx >= exts.length) { resolve(null); return; }
-      const ext = exts[idx++];
+    let resolved = false;
+    let failed   = 0;
+
+    const done = (audio) => { if (!resolved) { resolved = true; resolve(audio); } };
+    setTimeout(() => done(null), 5000); // segurança global
+
+    for (const ext of exts) {
       let fullPath = basePath + '/' + name + ext;
       try { fullPath = require('path').join(basePath, name + ext); } catch {}
       const audio = new Audio(fullPath);
-      let done = false;
-      const ok  = () => { if (!done) { done = true; resolve(audio); } };
-      const err = () => { if (!done) { done = true; tryNext(); } };
-      audio.addEventListener('canplay', ok,  { once: true });
-      audio.addEventListener('error',   err, { once: true });
-      setTimeout(err, 3000); // timeout de segurança por extensão
+      audio.addEventListener('canplay', () => done(audio), { once: true });
+      audio.addEventListener('error',   () => { if (++failed === exts.length) done(null); }, { once: true });
       audio.load();
-    };
-    tryNext();
+    }
   });
 }
 
 const SFXManager = {
-  _sons:  {},   // { personagemIdx: { attack1, attack2, especial, hurt, death } }
-  _nomes: ['Espadachim', 'Lutador', 'Mago', 'Vampira', 'Vampiro'],
+  _sons:   {},   // { personagemIdx: { attack1, attack2, especial, hurt, death } }
+  _nomes:  ['Espadachim', 'Lutador', 'Mago', 'Vampira', 'Vampiro'],
+  _volume: 0.7,
+
+  setVolume(v) {
+    this._volume = Math.max(0, Math.min(1, v));
+    localStorage.setItem('arcade_sfx_volume', this._volume);
+  },
+
+  getVolume() { return this._volume; },
 
   // Carrega todos os sons dos 5 personagens em paralelo.
   // Estrutura: sound/NomePersonagem/tipoNomePersonagem.(mp3|wav)
   // Testa .mp3 primeiro, depois .wav para cada arquivo.
   async init(basePath) {
+    const saved = parseFloat(localStorage.getItem('arcade_sfx_volume'));
+    this._volume = isNaN(saved) ? 0.7 : Math.max(0, Math.min(1, saved));
+
     const tipos = ['attack1', 'attack2', 'especial', 'hurt', 'death'];
     const proms = [];
     for (let i = 0; i < this._nomes.length; i++) {
@@ -147,8 +156,6 @@ const SFXManager = {
     console.log('[SFX] Inicialização concluída.');
   },
 
-  _volume: 0.7, // configurado externamente via window.Game.setSfxVolume
-
   // Toca um efeito sonoro do personagem.
   // Só executa durante FIGHTING. Usa cloneNode para permitir sobreposição.
   play(personagemIdx, tipo) {
@@ -156,7 +163,7 @@ const SFXManager = {
     const som = this._sons[personagemIdx]?.[tipo];
     if (!som) return;
     const clone = som.cloneNode(false);
-    clone.volume = Math.max(0, Math.min(1, this._volume));
+    clone.volume = this._volume;
     clone.play().catch(() => {});
   }
 };
@@ -651,12 +658,10 @@ function updateSelect() {
   for (let p = 0; p < numPlayers; p++) {
     if (selecao.escolhido[p] !== null) continue;
 
-    if (Controls.justPressed(p, 'left')) {
+    if (Controls.justPressed(p, 'left'))
       selecao.cursor[p] = Math.max(0, selecao.cursor[p] - 1);
-    }
-    if (Controls.justPressed(p, 'right')) {
+    if (Controls.justPressed(p, 'right'))
       selecao.cursor[p] = Math.min(totalPersonagens - 1, selecao.cursor[p] + 1);
-    }
 
     // Confirmar com 'up' (W/Espaço teclado, Cruz gamepad, D-pad cima)
     if (Controls.justPressed(p, 'up')) {
@@ -1334,3 +1339,5 @@ window.Game = {
   retomar: () => { gamePausado = false; },
   setSfxVolume: v => { SFXManager._volume = Math.max(0, Math.min(1, v)); },
 };
+
+window.SFXManager = SFXManager;

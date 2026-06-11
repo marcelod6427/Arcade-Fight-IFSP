@@ -41,6 +41,8 @@ Se não houver conexão, o jogo abre no modo offline com jogadores identificados
 
 Também é possível iniciar a partida sem login clicando em **"Jogar sem Login"** na tela do QR code.
 
+Durante qualquer partida, pressionar os botões **Single Player** ou **Multi Player** exibe uma confirmação de saída. No modo online, um aviso informa que os dados não serão salvos caso o jogador opte por retornar ao menu.
+
 ---
 
 ## MODOS DE JOGO
@@ -55,18 +57,6 @@ Também é possível iniciar a partida sem login clicando em **"Jogar sem Login"
 
 ## CONTROLES
 
-### Teclado
-
-| Ação | Player 1 | Player 2 |
-|---|---|---|
-| Mover | A / D | ◄ / ► |
-| Pular | W / Espaço | ▲ |
-| Ataque rápido | J | Numpad 1 |
-| Ataque forte | K | Numpad 2 |
-| Bloquear | L | Numpad 3 |
-| Especial | I | Numpad 5 |
-| Counter | U | Numpad 4 |
-
 ### Controle Arcade (mapeamento padrão)
 
 | Ação | P1 | P2 |
@@ -79,8 +69,6 @@ Também é possível iniciar a partida sem login clicando em **"Jogar sem Login"
 | Singleplayer | — | L2 |
 | Multiplayer | — | R2 |
 
-> O mapeamento dos controles pode ser personalizado a qualquer momento no **Menu de Configurações** durante a tela inicial.
-
 ---
 
 ## MENU DE CONFIGURAÇÕES
@@ -88,8 +76,10 @@ Também é possível iniciar a partida sem login clicando em **"Jogar sem Login"
 Acessado pelo botão ⚙ no canto superior esquerdo da tela inicial. Possui três abas:
 
 - **Controles** — remapeamento interativo de todos os botões para gamepad ou teclado/mouse. Clique em um botão, pressione o físico desejado, o mapeamento é aplicado imediatamente.
-- **Som** — controle de volume das músicas (0–100%). O valor é salvo automaticamente entre sessões.
+- **Som** — controle de volume das músicas e dos efeitos sonoros dos personagens (SFX), ambos de 0–100%. Valores salvos automaticamente entre sessões. Padrões: músicas 35%, SFX 45%.
 - **Créditos** — informações sobre o projeto, repositório e ferramentas utilizadas.
+
+Toda a navegação do menu de configurações suporta analógico do arcade e teclado (setas / WASD).
 
 ---
 
@@ -137,15 +127,6 @@ O jogo possui duas camadas de áudio independentes:
 
 ---
 
-## RECURSOS DE ÁUDIO E APRENDIZADO
-
-- **Pixabay** — sons dos sprites e efeitos sonoros
-- **CursoemVideo** — lógica de programação e JavaScript
-- **Alura** — desenvolvimento web e boas práticas
-- **MDN Web Docs** — Canvas API, Web Gamepad API, documentação das APIs
-
----
-
 ## INSTALAÇÃO
 
 1. Baixe o repositório e extraia o `.zip`
@@ -157,36 +138,6 @@ O jogo possui duas camadas de áudio independentes:
 Após instalado, use o atalho **"Arcade Fight"** na Área de Trabalho ou execute `start.bat`.
 
 > O servidor online pode demorar alguns segundos para inicializar. O `start.bat` tenta conexão por até 4 tentativas antes de entrar automaticamente em modo offline.
-
----
-
-## ESTRUTURA DO PROJETO
-
-```
-arcade-fight/
-├── game/              # Aplicativo Electron (frontend + lógica do jogo)
-│   ├── main.js        # Processo principal do Electron
-│   ├── index.html     # UI, menus e orquestração
-│   ├── game.js        # Lógica do jogo, física, IA
-│   ├── controls.js    # Sistema de input (teclado + gamepad)
-│   ├── sprites.js     # Gerenciador de sprites e definições dos personagens
-│   └── api.js         # Comunicação com o backend
-├── backend/           # Servidor FastAPI (Python)
-│   ├── main.py        # Aplicação FastAPI
-│   └── requirements.txt
-├── sprites/           # Sprites dos personagens e imagem de fundo
-├── sound/             # Trilhas sonoras e efeitos sonoros
-│   ├── menuInicial.mp3
-│   ├── luta.mp3
-│   ├── fimDoJogo.mp3
-│   ├── Espadachim/    # 5 efeitos sonoros por personagem
-│   ├── Lutador/
-│   ├── Mago/
-│   ├── Vampira/
-│   └── Vampiro/
-├── install.bat        # Instalador completo
-└── start.bat          # Inicializador do jogo
-```
 
 ---
 

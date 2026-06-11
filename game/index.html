@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="pt-br">
 <head>
   <meta charset="UTF-8">
@@ -329,16 +329,31 @@
     .som-item { margin-bottom: 18px; }
     .som-label { display: block; color: #aaa; font-size: 12px; font-weight: 700;
                  margin-bottom: 8px; font-family: monospace; letter-spacing: 1px; }
-    #volControl {
+    #volMaster, #volControl, #volSfx {
       border: 1px solid #252535; border-radius: 8px; padding: 8px 10px;
       cursor: pointer; transition: border-color .15s; outline: none;
     }
-    #volControl.focused, #volControl:hover { border-color: #e94560; }
+    #volMaster.focused, #volMaster:hover,
+    #volControl.focused, #volControl:hover,
+    #volSfx.focused,    #volSfx:hover    { border-color: #e94560; }
     .som-slider-row { display: flex; align-items: center; gap: 12px; }
     .som-slider-row input[type="range"] { flex: 1; accent-color: #e94560; cursor: pointer; }
     .som-slider-row span { color: #ffd700; font-size: 14px; font-weight: 900;
                            font-family: monospace; min-width: 38px; text-align: right; }
     .som-hint { font-size: 10px; color: #3a3a4a; margin-top: 5px; }
+
+    /* Botão Mutar */
+    .som-mute-row { margin-top: 6px; padding-bottom: 4px; }
+    #btnMutar {
+      width: 100%; padding: 10px 0;
+      border-radius: 8px; border: 2px solid #555;
+      background: transparent; color: #888;
+      font-size: 13px; font-weight: 700; letter-spacing: 1px;
+      cursor: pointer; transition: all .15s; pointer-events: all;
+      font-family: monospace;
+    }
+    #btnMutar:hover, #btnMutar.focused { border-color: #e94560; color: #e94560; }
+    #btnMutar.muted { border-color: #e94560; color: #e94560; background: rgba(233,69,96,0.12); }
 
     .config-creditos {
       text-align: left; max-height: 270px;
@@ -364,7 +379,9 @@
     #confirmSaida {
       display: none; position: absolute; top: 0; left: 0;
       width: 100%; height: 100%;
-      background: rgba(0,0,0,0.72);
+      background: rgba(0,0,0,0.65);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
       z-index: 90;
       align-items: center; justify-content: center;
       pointer-events: all;
@@ -378,8 +395,8 @@
       text-align: center;
       max-width: 480px;
     }
-    .confirm-box h3 { color: #e94560; font-size: 22px; margin-bottom: 12px; letter-spacing: 1px; }
-    .confirm-box p  { color: #aaa; font-size: 13px; line-height: 1.8; margin-bottom: 26px; }
+    .confirm-box h3 { color: #e94560; font-size: 22px; margin-bottom: 14px; letter-spacing: 1px; }
+    .confirm-box p  { color: #aaa; font-size: 13px; line-height: 1.8; margin-bottom: 24px; }
     .confirm-box p strong { color: #ffd700; }
     .confirm-btns { display: flex; gap: 16px; justify-content: center; }
     .confirm-btns button {
@@ -509,6 +526,9 @@
             </div>
             <p class="som-hint">◄ ► para ajustar  |  ⟲ PADRÃO = 70%</p>
           </div>
+          <div class="som-mute-row">
+            <button id="btnMutar" onclick="_toggleMutar()">🔇 MUTAR TUDO</button>
+          </div>
         </div>
       </div>
 
@@ -590,15 +610,17 @@
       <button id="btnJogarSemLogin" onclick="jogarSemLogin()">▶ Jogar sem Login</button>
     </div>
 
-    <!-- Modal de confirmação de abandono (só online) -->
+    <!-- Modal de confirmação de saída (offline e online) -->
     <div id="confirmSaida">
       <div class="confirm-box">
-        <h3>⚠ Abandonar a partida?</h3>
-        <p>Sair agora resultará na <strong>perda dos resultados</strong><br>
-           no placar online.<br>Tem certeza que deseja abandonar?</p>
+        <h3 id="confirmTitulo">⚠ Voltar ao menu?</h3>
+        <p id="confirmAviso" style="display:none">
+          Os dados desta partida <strong>não serão salvos</strong> no placar online.<br>
+          Deseja mesmo voltar ao menu principal?
+        </p>
         <div class="confirm-btns">
-          <button id="btnConfirmSim" onclick="_confirmarSaida()">Sim, sair</button>
-          <button id="btnConfirmNao" onclick="_cancelarSaida()">Não, continuar</button>
+          <button id="btnConfirmSim" onclick="_confirmarSaida()">Sim</button>
+          <button id="btnConfirmNao" onclick="_cancelarSaida()">Não</button>
         </div>
       </div>
     </div>
@@ -670,36 +692,29 @@
 
     // ── Sistema de som ────────────────────────────────────
     // Três faixas: menu, luta, fim. Crossfade suave (1.5s) entre elas.
-    // Três controles de volume: master (geral), music (músicas), sfx (personagens).
-    // Volume efetivo das músicas = master × music.
-    // Volume efetivo dos SFX     = master × sfx  → repassado a window.Game.setSfxVolume.
+    // Três volumes independentes: master, músicas e SFX.
     const SoundManager = {
-      _tracks:       {},
-      _masterVolume: 1.0,
-      _musicVolume:  0.35,
-      _sfxVolume:    0.7,
-      _currentKey:   null,
-      _fadeId:       null,
+      _tracks: {}, _masterVolume: 1.0, _musicVolume: 0.35, _sfxVolume: 0.7,
+      _currentKey: null, _fadeId: null, _muted: false,
 
-      _effMusic() { return this._masterVolume * this._musicVolume; },
-      _effSfx()   { return this._masterVolume * this._sfxVolume;   },
+      _effMusic() { return this._muted ? 0 : this._masterVolume * this._musicVolume; },
+      _effSfx()   { return this._muted ? 0 : this._masterVolume * this._sfxVolume;   },
 
       init() {
         const savedMaster = parseFloat(localStorage.getItem('arcade_master_volume'));
-        // lê 'arcade_music_volume' primeiro; migra chave antiga 'arcade_volume' se necessário
-        const savedMusic  = parseFloat(localStorage.getItem('arcade_music_volume') ??
-                                        localStorage.getItem('arcade_volume'));
+        const savedMusic  = parseFloat(localStorage.getItem('arcade_music_volume') ?? localStorage.getItem('arcade_volume'));
         const savedSfx    = parseFloat(localStorage.getItem('arcade_sfx_volume'));
         this._masterVolume = isNaN(savedMaster) ? 1.0  : Math.max(0, Math.min(1, savedMaster));
         this._musicVolume  = isNaN(savedMusic)  ? 0.35 : Math.max(0, Math.min(1, savedMusic));
         this._sfxVolume    = isNaN(savedSfx)    ? 0.7  : Math.max(0, Math.min(1, savedSfx));
+        this._muted = localStorage.getItem('arcade_muted') === '1';
 
         const base = '../sound/';
         const files = { menu: 'menuInicial.mp3', luta: 'luta.mp3', fim: 'fimDoJogo.mp3' };
         for (const [key, file] of Object.entries(files)) {
-          const a = new Audio(base + file);
-          a.loop   = true;
-          a.volume = 0;
+          const a    = new Audio(base + file);
+          a.loop     = true;
+          a.volume   = 0;
           this._tracks[key] = a;
         }
       },
@@ -715,7 +730,7 @@
         const STEPS    = 20;
         const INTERVAL = 75;
         this._currentKey = key;
-        const targetVol  = this._effMusic();
+        const target = this._effMusic();
 
         newAudio.volume = 0;
         newAudio.play().catch(() => {});
@@ -724,12 +739,12 @@
         this._fadeId = setInterval(() => {
           step++;
           const t = step / STEPS;
-          if (oldAudio) oldAudio.volume = Math.max(0, targetVol * (1 - t));
-          newAudio.volume               = Math.min(targetVol, targetVol * t);
+          if (oldAudio) oldAudio.volume = Math.max(0, target * (1 - t));
+          newAudio.volume               = Math.min(target, target * t);
           if (step >= STEPS) {
             clearInterval(this._fadeId); this._fadeId = null;
             if (oldAudio) { oldAudio.pause(); oldAudio.currentTime = 0; oldAudio.volume = 0; }
-            newAudio.volume = targetVol;
+            newAudio.volume = target;
           }
         }, INTERVAL);
       },
@@ -740,38 +755,35 @@
         this._currentKey = null;
       },
 
+      _applyMusicVol() {
+        if (this._currentKey && this._tracks[this._currentKey])
+          this._tracks[this._currentKey].volume = this._effMusic();
+      },
+      _applySfxVol() {
+        if (window.Game && window.Game.setSfxVolume) window.Game.setSfxVolume(this._effSfx());
+      },
+
       setMasterVolume(v) {
         this._masterVolume = Math.max(0, Math.min(1, v));
         localStorage.setItem('arcade_master_volume', this._masterVolume);
-        this._applyMusicVol();
-        this._applySfxVol();
+        this._applyMusicVol(); this._applySfxVol();
       },
-
       setMusicVolume(v) {
         this._musicVolume = Math.max(0, Math.min(1, v));
         localStorage.setItem('arcade_music_volume', this._musicVolume);
         this._applyMusicVol();
       },
-
       setSfxVolume(v) {
         this._sfxVolume = Math.max(0, Math.min(1, v));
         localStorage.setItem('arcade_sfx_volume', this._sfxVolume);
         this._applySfxVol();
       },
-
-      _applyMusicVol() {
-        if (this._currentKey && this._tracks[this._currentKey]) {
-          this._tracks[this._currentKey].volume = this._effMusic();
-        }
+      setMuted(v) {
+        this._muted = v;
+        localStorage.setItem('arcade_muted', v ? '1' : '0');
+        this._applyMusicVol(); this._applySfxVol();
       },
 
-      _applySfxVol() {
-        if (window.Game && window.Game.setSfxVolume) {
-          window.Game.setSfxVolume(this._effSfx());
-        }
-      },
-
-      // Compatibilidade com código anterior que chamava setVolume/getVolume (música)
       setVolume(v) { this.setMusicVolume(v); },
       getVolume()  { return this._musicVolume; }
     };
@@ -788,7 +800,7 @@
     // _focusIdx:       índice do elemento focado na lista retornada por obterElementosFocaveis
     // _menuGamepadRAF: ID do requestAnimationFrame do poll de gamepad de menu (null = parado)
     // _menuGamepadPrev: estado anterior dos pads no poll de menu, indexado por índice do pad
-    // controles:menuBtn: CustomEvent despachado por controls.js ao justPressed de L2/R2
+    // _shortcutPrev:   estado anterior dos botões L2/R2 no loop de atalhos globais
     let _modo    = null;
     let _salaId  = null;
     let _pendenteSaida = false; // true enquanto modal de confirmação de saída está aberta
@@ -803,6 +815,7 @@
     let _focusIdx         = 0;
     let _menuGamepadRAF   = null;
     let _menuGamepadPrev  = {};
+    let _shortcutPrev     = {};
     // Impede que chamadas concorrentes de _verificarSala() iniciem o jogo duas vezes.
     // Resetado em mostrarBotoesInicio() para permitir novas partidas.
     let _jaProntoParaJogar = false;
@@ -842,7 +855,7 @@
     //   3. Api.verificarConexao() → se offline, exibe notifOffline e seta _modoOffline
     //   4. Game.init() — carrega sprites, configura canvas, registra inputs (controls.js)
     //   5. mostrarBotoesInicio() — exibe btnSingle/btnMulti
-    //   6. Listener 'controls:menuBtn' — L2/R2 detectados em controls.js a 60fps
+    //   6. _iniciarShortcutsGamepad() — loop L2/R2 sempre ativo
     //   7. Registra listeners dos CustomEvents de game.js
     window.addEventListener('DOMContentLoaded', async () => {
       ajustarTela();
@@ -860,11 +873,10 @@
 
       await Game.init();
       SoundManager.init();
-      SoundManager._applySfxVol(); // propaga volume sfx salvo para SFXManager
       mostrarBotoesInicio();
       SoundManager.play('menu');
 
-      // L2/R2 detectados em controls.js (60fps, justPressed) → ação de menu
+      // L2/R2 detectados via CustomEvent disparado por controls.js (60fps, sem setInterval)
       document.addEventListener('controls:menuBtn', e => {
         if (e.detail.btn === 'l2') _ativarModoViaBotao('single');
         if (e.detail.btn === 'r2') _ativarModoViaBotao('multi');
@@ -926,7 +938,7 @@
       document.getElementById('btnVoltar').classList.remove('visible');
 
       _telaAtual = 'inicial';
-      _focusIdx  = 0;
+      _focusIdx  = 2; // índice 2 = btnSingle (após btnConfig e btnFechar)
       // Nao sobrescreve foco se a notificacao offline ainda estiver visivel
       if (!document.getElementById('notifOffline').classList.contains('visible')) {
         atualizarFoco();
@@ -1202,10 +1214,7 @@
     }
 
     // Navega no menu. horizontal=true: esquerda/direita; false: cima/baixo.
-    // Config usa zonas: A=abas(0-2) | B=modo(3-4, só controles) | C=grade/vol | D=rodapé.
-    // Navega no menu. horizontal=true: esquerda/direita; false: cima/baixo.
-    // Navegação com clamping em todas as telas (sem wrap). Créditos usa scroll separado.
-    // Config: zonas A=abas(0-1) | G=sliders(som) | D=rodapé.
+    // Config: zonas A=abas | G=conteúdo (sliders/mute) | D=rodapé. Sem wrap entre zonas.
     function _menuGamepadNavegar(dir, horizontal = false) {
       if (_remapAtivo) return;
 
@@ -1213,13 +1222,13 @@
       if (!els.length) return;
 
       if (_telaAtual === 'config') {
-        const TAB_COUNT   = 2;
-        const volCount    = _configTab === 'som' ? 3 : 0;
+        const TAB_COUNT  = 2;
+        const volCount   = _configTab === 'som' ? 4 : 0; // volMaster, volControl, volSfx, btnMutar
         const rodapeCount = Math.max(0, els.length - TAB_COUNT - volCount);
 
-        const A_END = TAB_COUNT;
-        const GS    = A_END;
-        const GE    = GS + volCount;
+        const A_END = TAB_COUNT;           // 2
+        const GS    = A_END;               // conteúdo start
+        const GE    = GS + volCount;       // conteúdo end
         const D_STA = GE;
         const D_END = D_STA + rodapeCount;
 
@@ -1227,40 +1236,36 @@
         const inG = i => i >= GS   && i < GE;
         const inD = i => i >= D_STA && i < D_END;
 
-        // ── Horizontal ─────────────────────────────────
         if (horizontal) {
           if (inA(_focusIdx)) {
-            // Abas: clamp, não cicla
+            // Clamped — sem ciclo
             const newTab = Math.max(0, Math.min(TAB_COUNT - 1, _focusIdx + dir));
-            if (newTab !== _focusIdx) {
-              _focusIdx = newTab;
-              _mudarTab(['som', 'creditos'][newTab]);
-            }
+            _focusIdx = newTab;
+            _mudarTab(['som', 'creditos'][newTab]);
             return;
           }
           if (inG(_focusIdx)) {
-            // Ajusta slider focado ±5% com analógico/seta horizontal
             const f = els[_focusIdx];
-            let pct, setter, sliderId;
             if (f && f.id === 'volMaster') {
-              pct = Math.round(SoundManager._masterVolume * 100);
-              setter = v => _atualizarVolumeMaster(v); sliderId = 'sliderMaster';
-            } else if (f && f.id === 'volControl') {
-              pct = Math.round(SoundManager._musicVolume * 100);
-              setter = v => _atualizarVolume(v); sliderId = 'sliderVolume';
-            } else if (f && f.id === 'volSfx') {
-              pct = Math.round(SoundManager._sfxVolume * 100);
-              setter = v => _atualizarVolumeSfx(v); sliderId = 'sliderSfx';
+              const pct = Math.min(100, Math.max(0, Math.round(SoundManager._masterVolume * 100) + dir * 5));
+              _atualizarVolumeMaster(pct);
+              const s = document.getElementById('sliderMaster'); if (s) s.value = pct;
+              return;
             }
-            if (setter) {
-              const np = Math.min(100, Math.max(0, pct + dir * 5));
-              setter(np);
-              const s = document.getElementById(sliderId);
-              if (s) s.value = np;
+            if (f && f.id === 'volControl') {
+              const pct = Math.min(100, Math.max(0, Math.round(SoundManager._musicVolume * 100) + dir * 5));
+              _atualizarVolume(pct);
+              const s = document.getElementById('sliderVolume'); if (s) s.value = pct;
+              return;
             }
-            return;
-          }
-          if (inD(_focusIdx)) {
+            if (f && f.id === 'volSfx') {
+              const pct = Math.min(100, Math.max(0, Math.round(SoundManager._sfxVolume * 100) + dir * 5));
+              _atualizarVolumeSfx(pct);
+              const s = document.getElementById('sliderSfx'); if (s) s.value = pct;
+              return;
+            }
+            // btnMutar: horizontal não faz nada
+          } else if (inD(_focusIdx)) {
             const newIdx = _focusIdx + dir;
             if (newIdx >= D_STA && newIdx < D_END) _focusIdx = newIdx;
           }
@@ -1268,16 +1273,14 @@
           return;
         }
 
-        // ── Vertical ───────────────────────────────────
+        // ── Vertical — sem wrap A→D nem D→A ──
         if (inA(_focusIdx)) {
-          if (dir > 0)
-            _focusIdx = volCount > 0 ? GS : (rodapeCount > 0 ? D_STA : _focusIdx);
-          // cima nas abas: clamp — fica no lugar
+          if (dir > 0) _focusIdx = volCount > 0 ? GS : (rodapeCount > 0 ? D_STA : _focusIdx);
+          // dir < 0: não wrapa para D
         } else if (inG(_focusIdx)) {
           if (dir > 0) {
             if (_focusIdx + 1 < GE) _focusIdx++;
             else if (rodapeCount > 0) _focusIdx = D_STA;
-            // clamp no último slider
           } else {
             if (_focusIdx > GS) _focusIdx--;
             else _focusIdx = A_END - 1;
@@ -1285,20 +1288,17 @@
         } else if (inD(_focusIdx)) {
           if (dir > 0) {
             if (_focusIdx + 1 < D_END) _focusIdx++;
-            // clamp no último rodapé — não volta ao topo
+            // Não wrapa para A
           } else {
             if (_focusIdx > D_STA) _focusIdx--;
-            else if (volCount > 0) _focusIdx = GE - 1;
-            else _focusIdx = A_END - 1;
+            else _focusIdx = volCount > 0 ? GE - 1 : A_END - 1;
           }
-        } else {
-          _focusIdx = Math.max(0, Math.min(els.length - 1, _focusIdx + dir));
         }
         atualizarFoco();
         return;
       }
 
-      // Tela inicial: grade 2×2 (Config|Fechar / Single|Multi) — clamp
+      // Tela inicial: grade 2×2 (Config|Fechar / Single|Multi) — clamped
       if (_telaAtual === 'inicial') {
         const COLS = 2;
         const rows = Math.ceil(els.length / COLS);
@@ -1310,13 +1310,13 @@
           if (newIdx < els.length) _focusIdx = newIdx;
         } else {
           const newRow = Math.max(0, Math.min(rows - 1, row + dir));
-          _focusIdx    = Math.min(newRow * COLS + col, els.length - 1);
+          _focusIdx = Math.min(newRow * COLS + col, els.length - 1);
         }
         atualizarFoco();
         return;
       }
 
-      // Demais telas (dificuldade, qr, confirmSaida, notifOffline…): clamp
+      // Demais telas: flat clamped
       const newIdx = _focusIdx + dir;
       if (newIdx >= 0 && newIdx < els.length) _focusIdx = newIdx;
       atualizarFoco();
@@ -1398,6 +1398,46 @@
       document.dispatchEvent(new CustomEvent('game:telaInicial'));
     }
 
+    // ── Atalhos globais de gamepad: L2 = single, R2 = multi ──
+
+    // Monitora L2 (btn 7 = single) e R2 (btn 6 = multi) do P2 (gamepad índice 1) a cada 100ms.
+    // Usa setInterval em vez de RAF para não competir com o game loop na leitura
+    // de getGamepads() — dois callers RAF simultâneos causam sincronização dupla
+    // com a thread HID do USB, gerando micro-stutters visíveis nos sprites.
+    // 100ms é suficiente para resposta a botões de menu (não precisa de 60fps).
+    // P1 não tem botões de menu — só P2 possui L2/R2 (Controls.mappings[1].l2/r2).
+    // Borda de subida em L2 → _ativarModoViaBotao('single')
+    // Borda de subida em R2 → _ativarModoViaBotao('multi')
+    function _iniciarShortcutsGamepad() {
+      function poll() {
+        if (!navigator.getGamepads) return;
+        const pads = navigator.getGamepads();
+        // Apenas P2 (gamepad 1) tem botões de menu — lê índices do mapeamento atual
+        const pad = pads[1];
+        if (!pad || !pad.connected) { _shortcutPrev[1] = null; return; }
+
+        // Índices dinâmicos: respeitam remapeamento feito no painel de config
+        const l2Idx = Controls.mappings[1].l2;
+        const r2Idx = Controls.mappings[1].r2;
+
+        if (!_shortcutPrev[1]) {
+          _shortcutPrev[1] = {
+            l2: l2Idx >= 0 ? !!(pad.buttons[l2Idx] && pad.buttons[l2Idx].pressed) : false,
+            r2: r2Idx >= 0 ? !!(pad.buttons[r2Idx] && pad.buttons[r2Idx].pressed) : false
+          };
+          return;
+        }
+        const l2 = l2Idx >= 0 ? !!(pad.buttons[l2Idx] && pad.buttons[l2Idx].pressed) : false;
+        const r2 = r2Idx >= 0 ? !!(pad.buttons[r2Idx] && pad.buttons[r2Idx].pressed) : false;
+        if (l2 && !_shortcutPrev[1].l2) _ativarModoViaBotao('single');
+        if (r2 && !_shortcutPrev[1].r2) _ativarModoViaBotao('multi');
+        _shortcutPrev[1].l2 = l2;
+        _shortcutPrev[1].r2 = r2;
+      }
+      poll(); // leitura imediata para inicializar prev antes do primeiro tick
+      setInterval(poll, 100);
+    }
+
     // Trata o pressionamento de L2/R2 conforme o estado atual do jogo.
     //
     // Na tela inicial (TELA_INICIAL ou estado vazio):
@@ -1411,6 +1451,7 @@
     //   O usuário então escolhe o modo manualmente — sem disparo automático de clicarSingle/Multi.
     // Executa a saída efetiva da partida (limpeza completa → menu inicial).
     function _executarSaida() {
+      SoundManager.play('menu');
       _stopPolling();
       if (_salaId) {
         try { Api.cancelarSala(_salaId); } catch(e) {}
@@ -1428,9 +1469,20 @@
       mostrarBotoesInicio();
     }
 
-    // Exibe o modal de confirmação de abandono (só durante partida online).
+    // Exibe o modal de confirmação de saída (offline e online, com título diferente).
     function _mostrarConfirmacaoSaida() {
       _pendenteSaida = true;
+
+      const titulo = document.getElementById('confirmTitulo');
+      const aviso  = document.getElementById('confirmAviso');
+      if (_modoOffline) {
+        if (titulo) titulo.textContent  = '⚠ Voltar ao menu?';
+        if (aviso)  aviso.style.display = 'none';
+      } else {
+        if (titulo) titulo.textContent  = '⚠ Abandonar a partida?';
+        if (aviso)  aviso.style.display = '';
+      }
+
       document.getElementById('confirmSaida').classList.add('visible');
       if (Game.pausar) Game.pausar();
       _telaAtual = 'confirmSaida';
@@ -1466,15 +1518,15 @@
         return;
       }
 
-      // Durante partida ativa E online: pedir confirmação antes de sair
+      // Durante partida ativa (offline ou online): pedir confirmação antes de sair
       const partidaAtiva = (estado === 'FIGHTING' || estado === 'COUNTDOWN' ||
                             estado === 'ROUND_END' || estado === 'SELECT');
-      if (!_modoOffline && partidaAtiva) {
+      if (partidaAtiva) {
         _mostrarConfirmacaoSaida();
         return;
       }
 
-      // Offline ou GAME_OVER: sair direto, sem confirmação
+      // GAME_OVER: sair direto, sem confirmação
       _executarSaida();
     }
 
@@ -1527,18 +1579,20 @@
       // O listener de remap em capture phase já tratou o evento antes de chegar aqui
       if (_remapAtivo && _configInputMode === 'keyboard') return;
       const estado = Game.getState ? Game.getState() : '';
-      if (estado === 'FIGHTING' || estado === 'SELECT' ||
-          estado === 'COUNTDOWN' || estado === 'ROUND_END') return;
 
-      // Atalhos de teclado para single/multi (F1-F4 padrão, remapeáveis)
-      // Ignorados dentro do painel de config para não conflitar com remapeamento
-      if (_telaAtual !== 'config') {
+      // Atalhos l2/r2 verificados ANTES do early-return de estado de luta,
+      // pois precisam funcionar durante FIGHTING para abrir o modal de saída.
+      if (_telaAtual !== 'config' && !_pendenteSaida) {
         const kms = [Controls.keymapP1, Controls.keymapP2];
         for (const km of kms) {
           if (km[e.code] === 'l2') { _ativarModoViaBotao('single'); e.preventDefault(); return; }
           if (km[e.code] === 'r2') { _ativarModoViaBotao('multi');  e.preventDefault(); return; }
         }
       }
+
+      // Navegação de menu bloqueada durante luta, exceto quando um modal está aberto
+      if ((estado === 'FIGHTING' || estado === 'SELECT' ||
+           estado === 'COUNTDOWN' || estado === 'ROUND_END') && !_pendenteSaida) return;
 
       const elementos = obterElementosFocaveis();
       if (elementos.length === 0) return;
@@ -1599,22 +1653,20 @@
         return [document.getElementById('btnPularPlacar')];
       }
       if (_telaAtual === 'config') {
-        const tabBtns   = Array.from(document.querySelectorAll('.config-tab-btn'));
-        const linhas    = _configTab === 'controles'
-          ? Array.from(document.querySelectorAll('#configGrid .config-linha'))
-          : [];
-        const modoBtns  = _configTab === 'controles'
-          ? Array.from(document.querySelectorAll('.modo-btn'))
-          : [];
-        const volEl     = _configTab === 'som'
-          ? ['volMaster', 'volControl', 'volSfx']
-              .map(id => document.getElementById(id)).filter(Boolean)
+        const tabBtns = Array.from(document.querySelectorAll('.config-tab-btn'));
+        const volEl   = _configTab === 'som'
+          ? [
+              document.getElementById('volMaster'),
+              document.getElementById('volControl'),
+              document.getElementById('volSfx'),
+              document.getElementById('btnMutar')
+            ].filter(Boolean)
           : [];
         const padraoBtn = document.getElementById('btnConfigPadrao');
         const fecharBtn = document.getElementById('btnConfigFechar');
         const rodape    = [padraoBtn, fecharBtn]
           .filter(el => el && el.style.display !== 'none');
-        return [...tabBtns, ...modoBtns, ...linhas, ...volEl, ...rodape];
+        return [...tabBtns, ...volEl, ...rodape];
       }
       if (_telaAtual === 'inicial') {
         // Grade 2×2: linha 0 = [Config, Fechar] | linha 1 = [Single, Multi]
@@ -1660,8 +1712,8 @@
     ];
 
     const MAPEAMENTO_PADRAO = [
-      { up: 3, buttons: [0, 4, 1, 2, -1], l2:  5, r2: -1 },
-      { up: 3, buttons: [0, 1, 4, 2, -1], l2: -1, r2:  5 }
+      { up: 3, buttons: [0, 4, 1, 2, -1], l2: 5, r2: -1 },
+      { up: 3, buttons: [0, 1, 4, 2, -1], l2: -1, r2: 5 }
     ];
 
     let _remapAtivo             = null;  // { player, acao }
@@ -1702,20 +1754,27 @@
       const padraoBtn = document.getElementById('btnConfigPadrao');
       if (padraoBtn) padraoBtn.style.display = tab === 'creditos' ? 'none' : '';
 
-      // Sincroniza sliders com valores atuais ao abrir aba Som
+      // Sincroniza sliders e botão mute com valores atuais ao abrir aba Som
       if (tab === 'som') {
-        const vals = [
-          { id: 'sliderMaster', lbl: 'lblMaster', v: Math.round(SoundManager._masterVolume * 100) },
-          { id: 'sliderVolume', lbl: 'lblVolume', v: Math.round(SoundManager._musicVolume  * 100) },
-          { id: 'sliderSfx',    lbl: 'lblSfx',    v: Math.round(SoundManager._sfxVolume    * 100) }
-        ];
-        for (const { id, lbl, v } of vals) {
-          const s = document.getElementById(id); if (s) s.value = v;
-          const l = document.getElementById(lbl); if (l) l.textContent = v + '%';
+        const masterPct = Math.round(SoundManager._masterVolume * 100);
+        const musicPct  = Math.round(SoundManager._musicVolume  * 100);
+        const sfxPct    = Math.round(SoundManager._sfxVolume    * 100);
+
+        const sM = document.getElementById('sliderMaster'); if (sM) sM.value = masterPct;
+        const lM = document.getElementById('lblMaster');    if (lM) lM.textContent = masterPct + '%';
+        const sV = document.getElementById('sliderVolume'); if (sV) sV.value = musicPct;
+        const lV = document.getElementById('lblVolume');    if (lV) lV.textContent = musicPct + '%';
+        const sS = document.getElementById('sliderSfx');    if (sS) sS.value = sfxPct;
+        const lS = document.getElementById('lblSfx');       if (lS) lS.textContent = sfxPct + '%';
+
+        const btnMutar = document.getElementById('btnMutar');
+        if (btnMutar) {
+          btnMutar.textContent = SoundManager._muted ? '🔊 DESMUTAR TUDO' : '🔇 MUTAR TUDO';
+          btnMutar.classList.toggle('muted', SoundManager._muted);
         }
       }
 
-      // Foca o botão da aba ativa para que o usuário saiba onde está
+      // Foca o botão da aba ativa
       const tabOrder = ['som', 'creditos'];
       _focusIdx = Math.max(0, tabOrder.indexOf(tab));
       atualizarFoco();
@@ -1943,46 +2002,24 @@
         .replace('Mouse0', 'M.Esq').replace('Mouse1', 'M.Mid').replace('Mouse2', 'M.Dir');
     }
 
-    // Reseta apenas o submenu ativo: controles → mapeamento padrão; som → volume 35%.
+    // Reseta o submenu ativo: som → volumes padrão e desmuta.
     function _resetarSubMenuAtual() {
-      if (_configTab === 'controles') {
-        _cancelarRemap();
-        if (_configInputMode === 'gamepad') {
-          MAPEAMENTO_PADRAO.forEach((m, p) => {
-            Controls.mappings[p].up      = m.up;
-            Controls.mappings[p].l2      = m.l2;
-            Controls.mappings[p].r2      = m.r2;
-            Controls.mappings[p].buttons = [...m.buttons];
-          });
-        } else {
-          // Reset keyboard: restaura keymaps originais
-          Object.keys(Controls.keymapP1).forEach(k => delete Controls.keymapP1[k]);
-          Object.assign(Controls.keymapP1, {
-            'KeyA':'left','KeyD':'right','KeyW':'up','KeyS':'down','Space':'up',
-            'KeyJ':'b0','KeyK':'b1','KeyL':'b2','KeyI':'b3','KeyU':'b4',
-            'F1':'l2','F2':'r2'
-          });
-          Object.keys(Controls.keymapP2).forEach(k => delete Controls.keymapP2[k]);
-          Object.assign(Controls.keymapP2, {
-            'ArrowLeft':'left','ArrowRight':'right','ArrowUp':'up','ArrowDown':'down',
-            'Numpad1':'b0','Numpad2':'b1','Numpad3':'b2','Numpad5':'b3','Numpad4':'b4','Numpad0':'b1',
-            'F3':'l2','F4':'r2'
-          });
-        }
-        _renderizarConfig();
-      } else if (_configTab === 'som') {
+      if (_configTab === 'som') {
         SoundManager.setMasterVolume(1.0);
+        const sM = document.getElementById('sliderMaster'); if (sM) sM.value = 100;
+        const lM = document.getElementById('lblMaster');    if (lM) lM.textContent = '100%';
+
         SoundManager.setMusicVolume(0.35);
+        const sV = document.getElementById('sliderVolume'); if (sV) sV.value = 35;
+        const lV = document.getElementById('lblVolume');    if (lV) lV.textContent = '35%';
+
         SoundManager.setSfxVolume(0.7);
-        const defaults = [
-          { id: 'sliderMaster', lbl: 'lblMaster', v: 100 },
-          { id: 'sliderVolume', lbl: 'lblVolume', v: 35  },
-          { id: 'sliderSfx',    lbl: 'lblSfx',    v: 70  }
-        ];
-        for (const { id, lbl, v } of defaults) {
-          const s = document.getElementById(id); if (s) s.value = v;
-          const l = document.getElementById(lbl); if (l) l.textContent = v + '%';
-        }
+        const sS = document.getElementById('sliderSfx');    if (sS) sS.value = 70;
+        const lS = document.getElementById('lblSfx');       if (lS) lS.textContent = '70%';
+
+        SoundManager.setMuted(false);
+        const btnMutar = document.getElementById('btnMutar');
+        if (btnMutar) { btnMutar.textContent = '🔇 MUTAR TUDO'; btnMutar.classList.remove('muted'); }
       }
     }
 
@@ -1993,6 +2030,7 @@
       SoundManager.setMasterVolume(v / 100);
     }
 
+    // Atualiza volume da música em tempo real via slider.
     function _atualizarVolume(val) {
       const v = parseInt(val);
       const lbl = document.getElementById('lblVolume');
@@ -2000,11 +2038,23 @@
       SoundManager.setMusicVolume(v / 100);
     }
 
+    // Atualiza volume dos personagens (SFX) em tempo real via slider.
     function _atualizarVolumeSfx(val) {
       const v = parseInt(val);
       const lbl = document.getElementById('lblSfx');
       if (lbl) lbl.textContent = v + '%';
       SoundManager.setSfxVolume(v / 100);
+    }
+
+    // Alterna mute de todos os sons do jogo.
+    function _toggleMutar() {
+      const muted = !SoundManager._muted;
+      SoundManager.setMuted(muted);
+      const btn = document.getElementById('btnMutar');
+      if (btn) {
+        btn.textContent = muted ? '🔊 DESMUTAR TUDO' : '🔇 MUTAR TUDO';
+        btn.classList.toggle('muted', muted);
+      }
     }
 
     // ── Utils ─────────────────────────────────────────────

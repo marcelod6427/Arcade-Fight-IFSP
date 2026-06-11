@@ -33,6 +33,15 @@ if not exist "%ROOT%game\node_modules" (
 )
 
 :: ================================================
+::  PING antecipado ao Render (acorda o servidor)
+::  Roda em background, nao bloqueia o bat
+:: ================================================
+
+echo  Enviando sinal de ativacao ao servidor remoto...
+start /b powershell -NoProfile -WindowStyle Hidden -Command ^
+  "try { Invoke-WebRequest -Uri 'https://arcade-fight-ifsp.onrender.com' -TimeoutSec 60 -UseBasicParsing | Out-Null } catch {}"
+
+:: ================================================
 ::  BACKEND
 :: ================================================
 
@@ -51,6 +60,7 @@ timeout /t 5 /nobreak >nul
 echo [2/2] Iniciando jogo (Electron)...
 echo.
 
+echo  Verificando servidor online...
 set "TENTATIVA=1"
 :verificar_servidor
 echo  Verificando conexao com o servidor... (tentativa !TENTATIVA!/5)
@@ -66,9 +76,9 @@ if !TENTATIVA! EQU 5 (
     echo.
     goto :iniciar_electron
 )
-echo  Servidor nao respondeu. Aguardando 3s antes da proxima tentativa...
+echo  Servidor nao respondeu. Aguardando 6s antes da proxima tentativa...
 set /a TENTATIVA=!TENTATIVA!+1
-timeout /t 3 /nobreak >nul
+timeout /t 6 /nobreak >nul
 goto :verificar_servidor
 
 :iniciar_electron
